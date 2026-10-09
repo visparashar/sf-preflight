@@ -2,7 +2,7 @@
   "name": "sf-preflight-vscode",
   "displayName": "sf-preflight: Salesforce change impact",
   "description": "See what a Salesforce change sets off before it ships: flows, triggers, validation rules, roll-ups, permissions and Agentforce actions, with findings in the Problems panel and the blast radius beside your code.",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "publisher": "visparashar",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
