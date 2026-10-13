@@ -20,6 +20,11 @@ See them all with `preflight analyze --staged`. Fix them, or skip this check onc
 
 Commits that stage no Salesforce metadata are not slowed down and print nothing.
 
+By default the hook reports only what the staged change **introduces**: findings that were already there at
+`HEAD` (an old recursion cycle, DML in a loop in a legacy class) are hidden and counted, so a commit isn't
+blocked for problems it didn't cause. `preflight hook run --all` shows everything; a `baseline` in
+`.preflight.json` takes precedence ([baseline](CONFIG.md#baseline-only-new-findings)).
+
 ## Options
 
 | Command | What it does |

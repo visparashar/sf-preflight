@@ -683,6 +683,8 @@ export interface AnalysisResult {
   /** The `.preflight.json` applied to the findings (project-relative path). */
   /** The policy file applied (project-relative), the git ref it came from, and its digest. */
   config?: { file: string; ref?: string; sha256?: string };
+  /** Present when findings already there before the change were hidden (see baseline.ts). */
+  baseline?: { source: string; hidden: number };
   /** Present when the quality gate was evaluated (`--gate`). */
   gate?: GateResult;
 }

@@ -12,11 +12,14 @@ import {
   alertFromMonitor,
   alertFromResult,
   allAgentActions,
+  analyze,
   analyzeChange,
+  applyConfig,
   applyRollback,
   assertSafeOrg,
   assertSafeRef,
   assertSafeWebhook,
+  BASELINE_FILE,
   buildEvidence,
   changeAt,
   changeFingerprint,
@@ -29,6 +32,7 @@ import {
   generateTests,
   incidentsToMarkdown,
   investigateIncidents,
+  loadPolicy,
   loadProject,
   monitorShouldNotify,
   monitorToMarkdown,
@@ -58,6 +62,8 @@ import {
   validateTests,
   validationToMarkdown,
   verifyEvidence,
+  wholeProjectChanges,
+  writeBaselineFile,
 } from "./core/index.js";
 import { bundledSkillDir, installSkill } from "./core/skill.js";
 
@@ -110,6 +116,7 @@ interface PolicyOptions {
   head?: string;
   files?: string[];
   staged?: boolean;
+  baseline?: string | false;
   depth: number;
   org?: string;
   failOn?: FailOn;
@@ -136,6 +143,7 @@ function analyzeWithPolicy(opts: PolicyOptions, withGate: boolean) {
     head: opts.head,
     files: opts.files,
     staged: opts.staged,
+    baseline: opts.baseline,
     maxDepth: opts.depth,
     org: opts.org,
     config: opts.config,
@@ -185,6 +193,11 @@ const policyOptions = (cmd: Command) =>
     .option("--head <ref>", "git head ref (default: working tree)")
     .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
     .option("--staged", "the files staged for the next commit, compared with HEAD")
+    .option(
+      "--baseline <source>",
+      'report only findings the change introduces: "base" (compare with the base ref) or a baseline file',
+    )
+    .option("--no-baseline", "show every finding, even if .preflight.json sets a baseline")
     .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
     .option("--org <alias>", "add read-only context from an org authorized with `sf org login` (beta)")
     .option("--config <file>", "policy file (default: .preflight.json in the project, then the git root)")
@@ -833,6 +846,24 @@ program
   );
 
 program
+  .command("baseline")
+  .description("Record the findings the whole project has today, so only new ones are reported from now on")
+  .option("-p, --project <dir>", "SFDX project directory", ".")
+  .option("-o, --out <file>", "baseline file to write (default: .preflight-baseline.json in the project)")
+  .action((opts: { project: string; out?: string }) => {
+    const projectDir = path.resolve(opts.project);
+    const model = loadProject(projectDir);
+    const policy = loadPolicy(projectDir).config;
+    const result = applyConfig(analyze({ model, changes: wholeProjectChanges(projectDir) }), policy);
+    const out = opts.out ? path.resolve(opts.out) : path.join(projectDir, BASELINE_FILE);
+    const n = writeBaselineFile(out, result.findings);
+    const rel = path.relative(projectDir, out).split(path.sep).join("/");
+    console.log(
+      `Recorded ${n} known finding(s) in ${rel}.\nCommit it, and add "baseline": "${rel}" to .preflight.json so analyses, the hook and CI report only new findings.`,
+    );
+  });
+
+program
   .command("hook")
   .description("Check staged Salesforce metadata before each commit (a git pre-commit hook)")
   .argument("[action]", "install, uninstall, or run (what the hook calls)", "install")
@@ -844,7 +875,8 @@ program
     ).choices(["low", "medium", "high", "none"]),
   )
   .option("--force", "install: replace an existing pre-commit hook that isn't sf-preflight's")
-  .action((action: string, opts: { project: string; failOn?: Severity | "none"; force?: boolean }) => {
+  .option("--all", "run: report every finding, not only those the staged change introduces")
+  .action((action: string, opts: { project: string; failOn?: Severity | "none"; force?: boolean; all?: boolean }) => {
     if (action === "install") {
       const r = installHook(opts.project, { version, failOn: opts.failOn, force: opts.force });
       if (r.status === "exists-other") {
@@ -865,7 +897,13 @@ program
       return;
     }
     if (action !== "run") throw new Error(`Unknown hook action: ${action} (install, uninstall or run).`);
-    const { result, policy } = analyzeChange({ projectDir: opts.project, staged: true });
+    // By default only what the staged change introduces blocks the commit (compared with HEAD).
+    const { result, policy } = analyzeChange({
+      projectDir: opts.project,
+      staged: true,
+      baseline: opts.all ? false : undefined,
+      defaultBaseline: "base",
+    });
     if (!result.changes.length) return; // nothing Salesforce staged
     const failOn = opts.failOn ?? (policy.gate?.failOn as Severity | "none" | undefined) ?? "high";
     process.stderr.write(`${hookSummary(result, failOn)}\n`);

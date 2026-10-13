@@ -77,6 +77,12 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
         `Recognized but not analyzed in depth: ${types}._`,
     );
   }
+  if (result.baseline?.hidden) {
+    out.push(
+      "",
+      `_Baseline: ${result.baseline.hidden} finding(s) that were already there before this change are not shown (${result.baseline.source})._`,
+    );
+  }
   if (result.config) {
     out.push("", `_Policy: \`${result.config.file}\`${result.config.ref ? ` at \`${result.config.ref}\`` : ""}_`);
   }

@@ -209,7 +209,11 @@ function loadPages(model: OrgModel, read: (rel: string) => string): void {
 }
 
 /** Load and parse every supported metadata file in an SFDX project. */
-export function loadProject(projectDirInput: string, opts: { cache?: boolean } = {}): OrgModel {
+export function loadProject(
+  projectDirInput: string,
+  /** `cacheKey`: use another directory's parse cache (a copy of the same project, e.g. at the base ref). */
+  opts: { cache?: boolean; cacheKey?: string } = {},
+): OrgModel {
   const projectDir = path.resolve(projectDirInput);
   if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
     throw new Error(`Project directory not found: ${projectDir}`);
@@ -246,7 +250,7 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
     if (ref.type === "CustomObject") ensureObject(model, ref.name).file = ref.file;
   }
   const projectObjects = new Set(model.objects.keys());
-  const cache = new ParseCache(projectDir, projectObjects, opts.cache);
+  const cache = new ParseCache(opts.cacheKey ?? projectDir, projectObjects, opts.cache);
 
   const read = (rel: string) => readFileSync(path.join(projectDir, rel), "utf8");
   cache.prefill(

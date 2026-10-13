@@ -92,6 +92,30 @@ results), it fails and says what to pass, rather than passing silently.
 AI-assisted commits are recognised from co-author trailers and tool markers (Claude, Copilot,
 Cursor, Codex, Gemini, Devin and others).
 
+## Baseline: only new findings
+
+An org with years of history has findings that have nothing to do with today's change: a recursion cycle
+between two old flows, DML in a loop in a legacy class. A baseline keeps them out of the way, so the report,
+the quality gate and the pre-commit hook react to what the change introduces.
+
+```json
+{ "baseline": "base" }
+```
+
+| Value | Meaning |
+|---|---|
+| `"base"` | Analyze the changed components as they are at the base ref too (`--base`, `HEAD` for `--staged`), and hide the findings that were already there. Nothing to maintain. |
+| a path, e.g. `".preflight-baseline.json"` | A reviewed list of accepted findings, written by `preflight baseline` and committed. New findings outside the list are reported; delete entries as you fix them. |
+
+`--baseline base`, `--baseline <file>` and `--no-baseline` set it for one run. The pre-commit hook uses `"base"`
+unless the policy sets a baseline (`preflight hook run --all` shows everything).
+
+Only findings that describe a state the org can already be in can be hidden: cycles, DML or SOQL in loops,
+automation density, validation or duplicate rules that automated writes must pass, untested agent actions,
+inactive flows, references to fields or classes the project lacks, insecure integrations, broad permissions.
+Findings about the change itself (what a changed field is used by, what a deletion breaks, access granted or
+removed) are always reported. The report says how many findings the baseline hid.
+
 ## Output formats for pipelines
 
 | Format | Use |
