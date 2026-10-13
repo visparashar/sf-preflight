@@ -4,7 +4,7 @@
 // MCP server definition. Run after `npm run build`.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import Module, { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -309,7 +309,7 @@ test("offers quick fixes, and accepts a known issue into the baseline", async ()
   const diags = vscode.__state.diagnostics.get(file) ?? [];
   const loop = diags.find((d) => d.code.value === "dml-or-soql-in-loop");
   assert.ok(loop, "the DML-in-loop problem");
-  const actions = vscode.__state.codeActions.provideCodeActions({ uri: vscode.Uri.file(file) }, loop.range, {
+  const actions = await vscode.__state.codeActions.provideCodeActions({ uri: vscode.Uri.file(file) }, loop.range, {
     diagnostics: [loop],
   });
   const titles = actions.map((a) => a.title);
@@ -334,6 +334,54 @@ test("offers quick fixes, and accepts a known issue into the baseline", async ()
   );
   rmSync(path.join(repo, ".preflight-baseline.json"));
   rmSync(path.join(repo, ".preflight.json"));
+});
+
+test("offers a checked fix first, applies it, and the problem goes away", async () => {
+  // A named credential switched to plain http.
+  const file = path.join(repo, SRC, "namedCredentials", "Billing.namedCredential-meta.xml");
+  const nc = (url) =>
+    `<?xml version="1.0" encoding="UTF-8"?>\n<NamedCredential xmlns="http://soap.sforce.com/2006/04/metadata">\n    <endpoint>${url}</endpoint>\n    <label>Billing</label>\n    <principalType>NamedUser</principalType>\n    <protocol>Password</protocol>\n</NamedCredential>\n`;
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, nc("https://billing.example.com"));
+  git("add", "--", file);
+  git("commit", "-q", "-m", "named credential");
+  writeFileSync(file, nc("http://billing.example.com"));
+  let before = runs();
+  await vscode.__state.commands.get("sfPreflight.analyze")();
+  await until(() => runs() > before, "an analysis of the http change");
+  const problem = (vscode.__state.diagnostics.get(file) ?? []).find((d) => d.code.value === "integration-insecure");
+  assert.ok(problem, "the insecure-integration problem");
+  const actions = await vscode.__state.codeActions.provideCodeActions({ uri: vscode.Uri.file(file) }, problem.range, {
+    diagnostics: [problem],
+  });
+  assert.equal(actions[0].title, "Fix: Use https for the named credential");
+  assert.equal(actions[0].isPreferred, true);
+  before = runs();
+  await vscode.__state.commands.get(actions[0].command.command)(...actions[0].command.arguments);
+  // A safe fix applies without the preview, and says what to check.
+  const edit = vscode.__state.appliedEdits.at(-1);
+  assert.equal(edit.edits[0].metadata.needsConfirmation, false);
+  assert.equal(readFileSync(file, "utf8"), nc("https://billing.example.com"));
+  await until(() => runs() > before, "an analysis after the fix");
+  await until(
+    () => !(vscode.__state.diagnostics.get(file) ?? []).some((d) => d.code.value === "integration-insecure"),
+    "the fixed problem to go away",
+  );
+  // A fix for a file that changed since it was checked is not applied.
+  writeFileSync(file, nc("http://billing.example.com"));
+  before = runs();
+  await vscode.__state.commands.get("sfPreflight.analyze")();
+  await until(() => runs() > before, "an analysis of the http change again");
+  const again = (vscode.__state.diagnostics.get(file) ?? []).find((d) => d.code.value === "integration-insecure");
+  const [fix] = await vscode.__state.codeActions.provideCodeActions({ uri: vscode.Uri.file(file) }, again.range, {
+    diagnostics: [again],
+  });
+  writeFileSync(file, nc("http://other.example.com"));
+  await vscode.__state.commands.get(fix.command.command)(...fix.command.arguments);
+  assert.equal(readFileSync(file, "utf8"), nc("http://other.example.com"));
+  assert.match(vscode.__state.warnings.at(-1), /changed since this fix was checked/);
+  git("rm", "-q", "-f", "--", file);
+  git("commit", "-q", "-m", "drop named credential");
 });
 
 test("generates tests that don't count as part of the change", async () => {

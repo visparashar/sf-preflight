@@ -167,6 +167,29 @@ preflight tests --base origin/main --validate --org my-sandbox
 
 See [docs/TESTS.md](docs/TESTS.md) for what is generated and how to read a failure.
 
+### Fix findings
+
+```bash
+preflight fix --base origin/main          # show checked fixes as diffs
+preflight fix --base origin/main --apply  # write the safe ones
+```
+
+For findings with a mechanical fix, sf-preflight writes the edit and checks it first: it analyzes the change
+again with the fix applied, and keeps the fix only if its finding is gone and no new high or medium finding
+appears. Each fix has a kind:
+
+| Kind | What it does | Fixes |
+|---|---|---|
+| **safe** | One right answer that keeps what the change was for | Named credential, remote site, CSP site or outbound message on `http` → `https` (and protocol security back on); a consumer secret removed from a connected app file; confirmation required on an agent action that deletes records |
+| **undo** | Puts one part of the change back as it was on the base branch | View All / Modify All, delete, a system permission or field edit taken back; a sharing default restored; removed picklist values restored, in their old place |
+| **review** | Mechanical, but read it | References still using a renamed component's old name updated; an outbound message stopped from sending a session ID |
+
+`--apply` writes only the safe ones; add `--kinds safe,undo,review` for more, or `--only <id>` for exactly the
+fixes you name. A file that changed since it was checked is never overwritten. Findings that need a decision
+(something deleted that is still used, a cycle to redesign) have no automatic fix: the report says what to do.
+The same fixes are the first quick fix on a problem in VS Code (undo and review fixes open VS Code's preview
+first), and the `suggest_fixes` MCP tool gives them to coding agents.
+
 ### Agentforce agents
 
 ```bash

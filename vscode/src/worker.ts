@@ -9,6 +9,7 @@ import path from "node:path";
 import { parentPort } from "node:worker_threads";
 import {
   analyzeChange,
+  findFixes,
   generateTests,
   insightFor,
   loadProject,
@@ -21,6 +22,7 @@ import type { SaveEvent } from "../../src/core/types.js";
 export type WorkerRequest =
   | { kind: "analyze"; projectDir: string; base: string; depth: number; overlay?: Record<string, string> }
   | { kind: "insight"; projectDir: string; file: string; overlay?: Record<string, string> }
+  | { kind: "fixes"; projectDir: string; base: string; depth: number; overlay?: Record<string, string> }
   | { kind: "tests"; projectDir: string; base: string; depth: number; outDir: string }
   | { kind: "explain"; projectDir: string; object: string; event: SaveEvent }
   | { kind: "objects"; projectDir: string };
@@ -70,6 +72,10 @@ function handle(req: WorkerRequest): unknown {
     case "explain": {
       const model = loadProject(req.projectDir);
       return { procedure: saveProcedure(model, req.object, req.event) };
+    }
+    case "fixes": {
+      // Checked fixes for the findings of the same analysis the editor shows.
+      return findFixes({ projectDir: req.projectDir, base: req.base, maxDepth: req.depth, overlay: req.overlay }).fixes;
     }
     case "insight": {
       const overlay = new Map(

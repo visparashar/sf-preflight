@@ -99,7 +99,7 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const typeOf = (c: ComponentRef) => c.metadataType ?? c.type;
 
 /** The name other files use, and whether it is distinctive enough to match anywhere. */
-function namesOf(c: ComponentRef): { qualified?: string; plain: string } {
+export function namesOf(c: ComponentRef): { qualified?: string; plain: string } {
   if (c.type === "ObjectChild" && c.object) {
     const last = c.name.split(".").pop() ?? c.name;
     return { qualified: `${c.object}.${last}`, plain: last };

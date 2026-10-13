@@ -7,6 +7,7 @@ import { editedFiles, installAgentHook, runAgentHook } from "./core/agentHook.js
 import { blocking, hookSummary, installHook, uninstallHook } from "./core/hook.js";
 import type { AnalysisResult, AppliedRollback, FailOn, SaveEvent, Severity, TestsResultFile } from "./core/index.js";
 import {
+  type ApplyResult,
   agentExplanationToMarkdown,
   agentListToMarkdown,
   agentTestsToMarkdown,
@@ -16,6 +17,7 @@ import {
   analyze,
   analyzeChange,
   applyConfig,
+  applyFixes,
   applyRollback,
   assertSafeOrg,
   assertSafeRef,
@@ -28,6 +30,9 @@ import {
   evaluateGate,
   evidenceToMarkdown,
   explainAgent,
+  type Fix,
+  findFixes,
+  fixesToMarkdown,
   GENERIC_ORG_LABEL,
   gateToMarkdown,
   generateTests,
@@ -45,6 +50,7 @@ import {
   parseSince,
   payloadFor,
   planRollback,
+  type RunOptions,
   readResult,
   rollbackToMarkdown,
   runAgentTests,
@@ -267,6 +273,87 @@ policyOptions(
       } else if (opts.failOn && opts.failOn !== "none" && RISK_RANK[result.summary.risk] >= RISK_RANK[opts.failOn]) {
         process.exitCode = 2;
       }
+    },
+  );
+
+program
+  .command("fix")
+  .description("Propose checked fixes for a change's findings; --apply writes them")
+  .option("-p, --project <dir>", "SFDX project directory", ".")
+  .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
+  .option("--head <ref>", "git head ref (default: working tree)")
+  .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
+  .option("--staged", "the files staged for the next commit, compared with HEAD")
+  .option("--baseline <source>", 'fix only findings the change introduces: "base" or a baseline file')
+  .option("--no-baseline", "consider every finding, even if .preflight.json sets a baseline")
+  .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
+  .option("--config <file>", "policy file (default: .preflight.json in the project, then the git root)")
+  .option("--no-config", "ignore .preflight.json")
+  .option("--rule <ids...>", "only fixes for these rules")
+  .option("--apply", "write the fixes (by default only the safe ones; see --kinds and --only)")
+  .option("--kinds <kinds>", "with --apply: which kinds to write, comma-separated (safe,undo,review)", "safe")
+  .option("--only <ids...>", "with --apply: write exactly these fixes, by id, whatever their kind")
+  .addOption(new Option("--format <format>", "output format").choices(["md", "json"]).default("md"))
+  .action(
+    (opts: {
+      project: string;
+      base?: string;
+      head?: string;
+      files?: string[];
+      staged?: boolean;
+      baseline?: string | false;
+      depth: number;
+      config?: string | false;
+      rule?: string[];
+      apply?: boolean;
+      kinds: string;
+      only?: string[];
+      format: "md" | "json";
+    }) => {
+      if (opts.base) assertSafeRef(opts.base, "base ref");
+      const run: RunOptions = {
+        projectDir: opts.project,
+        base: opts.base,
+        head: opts.head,
+        files: opts.files,
+        staged: opts.staged,
+        baseline: opts.baseline,
+        maxDepth: opts.depth,
+        config: opts.config,
+      };
+      if (opts.apply && opts.head) throw new Error("--apply writes the working tree; it can't be used with --head.");
+      const kinds = new Set(opts.kinds.split(",").map((k) => k.trim()));
+      for (const k of kinds)
+        if (!["safe", "undo", "review"].includes(k)) throw new Error(`Unknown fix kind "${k}" (safe, undo, review).`);
+      const only = opts.only?.length ? new Set(opts.only) : undefined;
+      const wanted = (f: Fix) => (only ? only.has(f.id) : kinds.has(f.kind));
+      let report = findFixes(run, { rules: opts.rule });
+      let applied: ApplyResult | undefined;
+      if (opts.apply) {
+        // Two fixes can edit the same file: apply what is still current, then look again (a few rounds).
+        const done: ApplyResult = { applied: [], stale: [] };
+        applied = done;
+        const first = report;
+        for (let round = 0; round < 5; round++) {
+          const todo = report.fixes.filter((f) => wanted(f) && !done.applied.includes(f.id));
+          if (!todo.length) break;
+          const r = applyFixes(run.projectDir, todo);
+          done.applied.push(...r.applied);
+          done.stale = r.stale;
+          if (!r.stale.length || !r.applied.length) break;
+          report = findFixes(run, { rules: opts.rule });
+        }
+        report = first;
+        if (only) {
+          const missing = [...only].filter((id) => !first.fixes.some((f) => f.id === id));
+          if (missing.length) process.stderr.write(`preflight: no checked fix with id ${missing.join(", ")}.\n`);
+        }
+      }
+      if (opts.format === "json")
+        process.stdout.write(
+          `${JSON.stringify({ fixes: report.fixes, rejected: report.rejected, withoutFix: report.withoutFix, applied: applied?.applied, stale: applied?.stale }, null, 2)}\n`,
+        );
+      else process.stdout.write(`${fixesToMarkdown(report, applied)}\n`);
     },
   );
 

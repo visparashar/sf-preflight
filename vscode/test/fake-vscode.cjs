@@ -24,9 +24,35 @@ class Position {
 }
 class Range {
   constructor(sl, sc, el, ec) {
-    this.start = new Position(sl, sc);
-    this.end = new Position(el, ec);
+    // new Range(startPosition, endPosition) or new Range(line, char, line, char)
+    if (sl instanceof Position) {
+      this.start = sl;
+      this.end = sc;
+    } else {
+      this.start = new Position(sl, sc);
+      this.end = new Position(el, ec);
+    }
   }
+}
+class WorkspaceEdit {
+  constructor() {
+    this.edits = [];
+  }
+  replace(uri, range, text, metadata) {
+    this.edits.push({ uri, range, text, metadata });
+  }
+}
+/** A document read from disk: enough for whole-file edits. */
+function docFromDisk(uri) {
+  const text = fs.readFileSync(uri.fsPath, "utf8");
+  return {
+    uri,
+    getText: () => text,
+    positionAt: (offset) => {
+      const before = text.slice(0, offset).split("\n");
+      return new Position(before.length - 1, before[before.length - 1].length);
+    },
+  };
 }
 class Uri {
   constructor(fsPath, raw) {
@@ -88,6 +114,7 @@ const vscode = {
   EventEmitter,
   Position,
   Range,
+  WorkspaceEdit,
   Uri,
   Diagnostic,
   TreeItem,
@@ -160,6 +187,9 @@ const vscode = {
     showTextDocument: async (uri) => {
       state.opened = [...(state.opened ?? []), uri.fsPath];
     },
+    showWarningMessage: async (msg) => {
+      state.warnings = [...(state.warnings ?? []), msg];
+    },
     showErrorMessage: async (msg) => {
       state.errors = [...(state.errors ?? []), msg];
     },
@@ -225,7 +255,16 @@ const vscode = {
       };
     },
     getWorkspaceFolder: () => vscode.workspace.workspaceFolders[0],
-    openTextDocument: async ({ content }) => {
+    applyEdit: async (edit) => {
+      state.appliedEdits = [...(state.appliedEdits ?? []), edit];
+      if (state.rejectEdits) return false;
+      // As if the user accepted and saved it.
+      for (const e of edit.edits) fs.writeFileSync(e.uri.fsPath, e.text);
+      return true;
+    },
+    openTextDocument: async (arg) => {
+      if (arg instanceof Uri) return docFromDisk(arg);
+      const { content } = arg;
       state.documents = [...(state.documents ?? []), content];
       return { uri: Uri.parse("untitled:report") };
     },
