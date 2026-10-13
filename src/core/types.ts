@@ -490,6 +490,10 @@ export type AutomationKind =
   | "AutoResponseRule"
   | "EscalationRule"
   | "ApprovalProcess"
+  | "OmniScript"
+  | "IntegrationProcedure"
+  | "DataMapper"
+  | "FlexCard"
   | "Change";
 
 export interface AutomationRef {

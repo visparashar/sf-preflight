@@ -43,6 +43,10 @@ const DEEP_METADATA: ReadonlySet<string> = new Set([
   "RemoteSiteSetting",
   "CspTrustedSite",
   "ConnectedApp",
+  "OmniScript",
+  "OmniIntegrationProcedure",
+  "OmniDataTransform",
+  "OmniUiCard",
 ]);
 
 export const isAnalyzedInDepth = (c: ComponentRef): boolean =>

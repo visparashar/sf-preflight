@@ -345,6 +345,51 @@ export const RULES: RuleInfo[] = [
     help: "Importing a missing field or class fails the deployment. Add it to the project, or make sure it exists in the target org before this change deploys.",
   },
   {
+    id: "omnistudio-used-by",
+    name: "OmniStudioUsedBy",
+    defaultSeverity: "info",
+    summary:
+      "A changed Integration Procedure, Data Mapper, OmniScript or FlexCard is used by other OmniStudio components.",
+    help: "A changed input, output or response shape reaches them. Run them after deploying.",
+  },
+  {
+    id: "omnistudio-missing-reference",
+    name: "OmniStudioMissingReference",
+    defaultSeverity: "medium",
+    summary:
+      "A changed OmniStudio component calls an Integration Procedure, Data Mapper, Apex class, OmniScript, Lightning component or field that is not in the project.",
+    help: "OmniStudio names these in JSON settings, so the deployment does not check them and the script fails when it runs. Add them to the project, or make sure the target org has them.",
+  },
+  {
+    id: "omnistudio-remote-not-callable",
+    name: "OmniStudioRemoteNotCallable",
+    defaultSeverity: "high",
+    summary: "An Apex class used by a Remote Action implements neither System.Callable nor VlocityOpenInterface2.",
+    help: "OmniStudio calls remote classes through one of those interfaces. Implement System.Callable and dispatch on the method name.",
+  },
+  {
+    id: "omnistudio-inactive-in-use",
+    name: "OmniStudioInactiveInUse",
+    defaultSeverity: "medium",
+    summary:
+      "An inactive Integration Procedure, OmniScript, Data Mapper or FlexCard is still called, and no active version is in the project.",
+    help: "Callers fail at run time unless the target org has an active version. Activate it or update the callers.",
+  },
+  {
+    id: "omnistudio-cycle",
+    name: "OmniStudioCycle",
+    defaultSeverity: "medium",
+    summary: "An Integration Procedure or OmniScript calls itself through other procedures or scripts.",
+    help: "Unless a condition stops it, it runs until a limit is hit. Check the loop is intended and guarded.",
+  },
+  {
+    id: "apex-called-from-omnistudio",
+    name: "ApexCalledFromOmniStudio",
+    defaultSeverity: "low",
+    summary: "A changed Apex class is called by OmniScripts, Integration Procedures or FlexCards.",
+    help: "A changed method name, input or output keys reach their users directly. Run the components that call it.",
+  },
+  {
     id: "picklist-value-removed",
     name: "PicklistValueRemoved",
     defaultSeverity: "medium",

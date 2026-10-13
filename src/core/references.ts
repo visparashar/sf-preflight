@@ -80,6 +80,10 @@ const PRECISE_ON_DELETE = new Set([
   "AuraDefinitionBundle",
   "CustomLabels",
   "CustomMetadata",
+  "OmniScript",
+  "OmniIntegrationProcedure",
+  "OmniDataTransform",
+  "OmniUiCard",
 ]);
 
 const TEXT_FILE = /\.(xml|cls|trigger|js|ts|html|cmp|app|evt|design|page|component|json|agent|yaml|yml)$/i;

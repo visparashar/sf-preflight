@@ -52,6 +52,12 @@ that is only inside the blast radius).
 | [`field-used-by-lightning`](#field-used-by-lightning) | Low | A changed field is used by Lightning Web Components or Aura components. |
 | [`apex-called-from-lightning`](#apex-called-from-lightning) | Low | A changed Apex class is called from Lightning components. |
 | [`lightning-missing-reference`](#lightning-missing-reference) | Medium | A changed Lightning component uses a field or Apex class that is not in the project. |
+| [`omnistudio-used-by`](#omnistudio-used-by) | Info | A changed Integration Procedure, Data Mapper, OmniScript or FlexCard is used by other OmniStudio components. |
+| [`omnistudio-missing-reference`](#omnistudio-missing-reference) | Medium | A changed OmniStudio component calls an Integration Procedure, Data Mapper, Apex class, OmniScript, Lightning component or field that is not in the project. |
+| [`omnistudio-remote-not-callable`](#omnistudio-remote-not-callable) | High | An Apex class used by a Remote Action implements neither System.Callable nor VlocityOpenInterface2. |
+| [`omnistudio-inactive-in-use`](#omnistudio-inactive-in-use) | Medium | An inactive Integration Procedure, OmniScript, Data Mapper or FlexCard is still called, and no active version is in the project. |
+| [`omnistudio-cycle`](#omnistudio-cycle) | Medium | An Integration Procedure or OmniScript calls itself through other procedures or scripts. |
+| [`apex-called-from-omnistudio`](#apex-called-from-omnistudio) | Low | A changed Apex class is called by OmniScripts, Integration Procedures or FlexCards. |
 | [`picklist-value-removed`](#picklist-value-removed) | Medium | Picklist values were removed or deactivated while record types, formulas, flows or Apex still use them. |
 | [`record-type-values-removed`](#record-type-values-removed) | Low | A record type no longer offers picklist values it offered before. |
 | [`record-type-deactivated`](#record-type-deactivated) | Low | A record type was deactivated. |
@@ -418,6 +424,54 @@ Lightning components call Apex from the browser, so a changed signature, result 
 A changed Lightning component uses a field or Apex class that is not in the project.
 
 Importing a missing field or class fails the deployment. Add it to the project, or make sure it exists in the target org before this change deploys.
+
+## omnistudio-used-by
+
+**OmniStudioUsedBy** · default severity: Info
+
+A changed Integration Procedure, Data Mapper, OmniScript or FlexCard is used by other OmniStudio components.
+
+A changed input, output or response shape reaches them. Run them after deploying.
+
+## omnistudio-missing-reference
+
+**OmniStudioMissingReference** · default severity: Medium
+
+A changed OmniStudio component calls an Integration Procedure, Data Mapper, Apex class, OmniScript, Lightning component or field that is not in the project.
+
+OmniStudio names these in JSON settings, so the deployment does not check them and the script fails when it runs. Add them to the project, or make sure the target org has them.
+
+## omnistudio-remote-not-callable
+
+**OmniStudioRemoteNotCallable** · default severity: High
+
+An Apex class used by a Remote Action implements neither System.Callable nor VlocityOpenInterface2.
+
+OmniStudio calls remote classes through one of those interfaces. Implement System.Callable and dispatch on the method name.
+
+## omnistudio-inactive-in-use
+
+**OmniStudioInactiveInUse** · default severity: Medium
+
+An inactive Integration Procedure, OmniScript, Data Mapper or FlexCard is still called, and no active version is in the project.
+
+Callers fail at run time unless the target org has an active version. Activate it or update the callers.
+
+## omnistudio-cycle
+
+**OmniStudioCycle** · default severity: Medium
+
+An Integration Procedure or OmniScript calls itself through other procedures or scripts.
+
+Unless a condition stops it, it runs until a limit is hit. Check the loop is intended and guarded.
+
+## apex-called-from-omnistudio
+
+**ApexCalledFromOmniStudio** · default severity: Low
+
+A changed Apex class is called by OmniScripts, Integration Procedures or FlexCards.
+
+A changed method name, input or output keys reach their users directly. Run the components that call it.
 
 ## picklist-value-removed
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { omniCallersOf, omniRef, omniWriters } from "./omnistudio.js";
 import { customComponent } from "./parsers/pages.js";
 import type {
   ApexClassDef,
@@ -67,7 +68,10 @@ export interface Writer {
   writes: Write[];
 }
 
-/** Every automation in the project that writes to `object` (active flows, triggers, non-test classes). */
+/**
+ * Every automation in the project that writes to `object` (active flows, triggers, non-test classes,
+ * OmniStudio Data Mapper Loads).
+ */
 export function writersOf(model: OrgModel, object: string): Writer[] {
   const target = object.toLowerCase();
   const result: Writer[] = [];
@@ -85,10 +89,11 @@ export function writersOf(model: OrgModel, object: string): Writer[] {
     const ws = cls.writes.filter((w) => w.object.toLowerCase() === target && w.op !== "delete");
     if (ws.length) result.push({ automation: { kind: "ApexClass", name: cls.name, file: cls.file }, writes: ws });
   }
+  result.push(...omniWriters(model, object));
   return result;
 }
 
-/** Triggers, flows and classes that directly reference a class. */
+/** Triggers, flows, classes, Lightning components and OmniStudio components that directly reference a class. */
 export function callersOfClass(model: OrgModel, className: string): AutomationRef[] {
   const k = key(className);
   const callers: AutomationRef[] = [];
@@ -107,6 +112,7 @@ export function callersOfClass(model: OrgModel, className: string): AutomationRe
   for (const lc of lightningCallingClass(model, className)) {
     callers.push({ kind: "LightningComponent", name: lc.name, file: lc.file });
   }
+  for (const o of omniCallersOf(model, "ApexClass", className)) callers.push(omniRef(o));
   return callers;
 }
 

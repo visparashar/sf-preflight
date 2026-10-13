@@ -59,6 +59,10 @@ export const CONDITION_RULES: ReadonlySet<string> = new Set([
   "page-missing-reference",
   "missing-field-reference",
   "integration-insecure",
+  "omnistudio-missing-reference",
+  "omnistudio-remote-not-callable",
+  "omnistudio-inactive-in-use",
+  "omnistudio-cycle",
 ]);
 
 /** What identifies a finding across runs: its rule and its wording. */
