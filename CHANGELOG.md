@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-13
+
 ### Added
 
 - `preflight agent-hook`: a Claude Code PostToolUse hook. After the agent edits Salesforce metadata, it reports
@@ -449,7 +451,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/visparashar/sf-preflight/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/visparashar/sf-preflight/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/visparashar/sf-preflight/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/visparashar/sf-preflight/compare/v0.9.0...v0.9.1
