@@ -156,6 +156,7 @@ describe("MCP server", () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "analyze_change",
+      "check_fix",
       "explain_agent",
       "explain_save_order",
       "find_field_references",
@@ -200,6 +201,44 @@ describe("MCP server", () => {
       json.fixes.every((f: { rule: string; kind: string }) => f.rule === "permission-escalation" && f.kind === "undo"),
     ).toBe(true);
     expect(json.fixes[0].diff).toContain("-        <modifyAllRecords>true</modifyAllRecords>");
+    expect(readFileSync(path.join(project, file), "utf8")).toBe(before);
+  });
+
+  it("check_fix accepts an edit that removes the finding and rejects one that doesn't, writing nothing", async () => {
+    const file = `${SRC}/permissionsets/Agent_Runtime_User.permissionset-meta.xml`;
+    const before = readFileSync(path.join(project, file), "utf8");
+    const check = async (content: string, finding?: string) =>
+      JSON.parse(
+        textOf(
+          await client.callTool({
+            name: "check_fix",
+            arguments: {
+              project_dir: "sfdx",
+              files: [file],
+              edits: [{ path: file, content }],
+              finding,
+              format: "json",
+            },
+          }),
+        ),
+      );
+    const fixed = await check(
+      before
+        .replace("<modifyAllRecords>true", "<modifyAllRecords>false")
+        .replace("<viewAllRecords>true", "<viewAllRecords>false"),
+      "permission-escalation",
+    );
+    expect(fixed.verdict).toBe("accepted");
+    expect(fixed.resolved.map((f: { rule: string }) => f.rule)).toContain("permission-escalation");
+    const same = await check(before, "permission-escalation");
+    expect(same.verdict).toBe("rejected");
+    expect(same.reasons.join(" ")).toContain("still reported");
+    expect((await check(before)).verdict).toBe("no-effect");
+    const outside = await client.callTool({
+      name: "check_fix",
+      arguments: { project_dir: "sfdx", files: [file], edits: [{ path: "../../etc/x", content: "x" }] },
+    });
+    expect(outside.isError).toBe(true);
     expect(readFileSync(path.join(project, file), "utf8")).toBe(before);
   });
 

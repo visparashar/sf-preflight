@@ -57,6 +57,9 @@ export {
 export {
   type ApplyResult,
   applyFixes,
+  type CheckedFinding,
+  checkEdits,
+  type EditCheck,
   type Fix,
   type FixReport,
   findFixes,

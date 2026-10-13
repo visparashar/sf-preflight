@@ -188,7 +188,9 @@ appears. Each fix has a kind:
 fixes you name. A file that changed since it was checked is never overwritten. Findings that need a decision
 (something deleted that is still used, a cycle to redesign) have no automatic fix: the report says what to do.
 The same fixes are the first quick fix on a problem in VS Code (undo and review fixes open VS Code's preview
-first), and the `suggest_fixes` MCP tool gives them to coding agents.
+first), and the `suggest_fixes` MCP tool gives them to coding agents. For a finding with no built-in fix, an agent
+writes its own and the `check_fix` tool runs the same check on it (the finding must be gone and nothing new
+of medium or high severity may appear) before anything is written.
 
 ### Agentforce agents
 

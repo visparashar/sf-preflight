@@ -146,6 +146,61 @@ export function findFixes(opts: RunOptions, fixOpts: FixOptions = {}): FixReport
   return { result, fixes, rejected, withoutFix };
 }
 
+export interface CheckedFinding {
+  id: string;
+  rule: string;
+  severity: Severity;
+  title: string;
+}
+
+export interface EditCheck {
+  /** accepted: a finding is gone and nothing blocking is new. rejected: something blocking is new, or the target is still there. no-effect: nothing changed in the findings. */
+  verdict: "accepted" | "rejected" | "no-effect";
+  resolved: CheckedFinding[];
+  introduced: CheckedFinding[];
+  /** The targeted finding, when one was named and it is still reported. */
+  stillThere?: CheckedFinding;
+  reasons: string[];
+}
+
+/**
+ * Check an edit someone else wrote (a person, or a coding agent's "fix with AI"): analyze the change
+ * again with the new file contents in place, as for a proposed fix. Nothing is written. `target` is a
+ * fix id (as `findFixes` gives) or a rule id; when given, that finding must be gone for the edit to be accepted.
+ */
+export function checkEdits(opts: RunOptions, files: Record<string, string>, target?: string): EditCheck {
+  const projectDir = path.resolve(opts.projectDir);
+  const overlay: Record<string, string> = {};
+  for (const [f, t] of Object.entries(opts.overlay ?? {}))
+    overlay[toPosix(path.relative(projectDir, path.resolve(projectDir, f)))] = t;
+  const fixed = { ...overlay };
+  for (const [f, text] of Object.entries(files)) {
+    const rel = toPosix(path.relative(projectDir, path.resolve(projectDir, f)));
+    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) throw new Error(`${f} is outside the project`);
+    fixed[rel] = text;
+  }
+  const brief = (f: Finding): CheckedFinding => ({ id: fixId(f), rule: f.rule, severity: f.severity, title: f.title });
+  const before = analyzeChange(opts).result.findings;
+  const after = analyzeChange({ ...opts, overlay: fixed }).result.findings;
+  const beforeKeys = new Set(before.map(fingerprint));
+  const afterKeys = new Set(after.map(fingerprint));
+  const resolved = before.filter((f) => !afterKeys.has(fingerprint(f))).map(brief);
+  const introduced = after.filter((f) => !beforeKeys.has(fingerprint(f))).map(brief);
+  const blocking = introduced.filter((f) => BLOCKING.has(f.severity));
+  const reasons: string[] = [];
+  const named = target ? after.find((f) => f.rule === target || fixId(f) === target) : undefined;
+  const targetExisted = target ? before.some((f) => f.rule === target || fixId(f) === target) : true;
+  if (target && !targetExisted) reasons.push(`no finding "${target}" in this change`);
+  if (named) reasons.push(`"${named.title}" is still reported`);
+  if (blocking.length) reasons.push(`it brings ${blocking.map((f) => `"${f.title}"`).join(", ")}`);
+  let verdict: EditCheck["verdict"];
+  if (reasons.length) verdict = "rejected";
+  else if (resolved.length) verdict = "accepted";
+  else verdict = "no-effect";
+  if (verdict === "no-effect") reasons.push("the findings are the same with this edit");
+  return { verdict, resolved, introduced, stillThere: named ? brief(named) : undefined, reasons };
+}
+
 export interface ApplyResult {
   applied: string[];
   /** Fixes not applied because a file changed since it was analyzed (another fix, or an edit). */

@@ -7,6 +7,7 @@ import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
   changeAt,
+  checkEdits,
   evaluateGate,
   explainAgent,
   fieldReferences,
@@ -37,6 +38,8 @@ permission sets):
 For findings with a mechanical fix, call suggest_fixes: it returns diffs that sf-preflight has
 already checked (the finding is gone and nothing new appears). Apply the ones that fit what the
 user asked for; fixes of kind "undo" reverse part of the change, so confirm those with the user.
+For a finding suggest_fixes has no fix for, write the fix yourself and run check_fix on the new file
+contents before writing them: it says whether the finding is gone and whether anything new appears.
 Use explain_save_order to understand what already runs on an object before adding automation,
 find_field_references before renaming, retyping or deleting a field, and explain_agent before
 changing anything an Agentforce agent action calls. When a recent change broke something in
@@ -153,6 +156,67 @@ export function createMcpServer(opts: McpServerOptions): McpServer {
           args.format === "json"
             ? JSON.stringify({ fixes: report.fixes, rejected: report.rejected, withoutFix: report.withoutFix }, null, 2)
             : fixesToMarkdown(report),
+        );
+      } catch (err) {
+        return failure(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "check_fix",
+    {
+      title: "Check a fix you wrote for a finding",
+      description:
+        "Check edits you propose, without writing them: sf-preflight analyzes the change again with the new " +
+        "file contents in place and says which findings are gone and which are new. Use it after writing a fix " +
+        'the suggest_fixes tool did not offer. Verdict "accepted": a finding is gone and nothing new of ' +
+        'high or medium severity appears; "rejected": it is still reported or something blocking is new; ' +
+        '"no-effect": the findings are the same. Pass `finding` (a fix id or a rule id) to require that one ' +
+        "finding be the one that goes. Then write the files yourself.",
+      inputSchema: {
+        project_dir: projectDirSchema,
+        base: z.string().optional().describe("Git base ref, e.g. origin/main (default: HEAD)"),
+        files: z
+          .array(z.string())
+          .optional()
+          .describe("Check the findings of these metadata files instead of a git diff (project-relative or absolute)"),
+        edits: z
+          .array(
+            z.object({
+              path: z.string().describe("Project file, relative to the project directory"),
+              content: z.string().max(2_000_000).describe("The whole new content of the file"),
+            }),
+          )
+          .min(1)
+          .max(20),
+        finding: z.string().optional().describe("Fix id or rule id of the finding the edit is meant to fix"),
+        format: z.enum(["markdown", "json"]).optional().describe("Report format (default: markdown)"),
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const dir = projectDir(args.project_dir);
+        const check = checkEdits(
+          { projectDir: dir, base: args.files?.length ? undefined : (args.base ?? "HEAD"), files: args.files },
+          Object.fromEntries(args.edits.map((e) => [e.path, e.content])),
+          args.finding,
+        );
+        if (args.format === "json") return text(JSON.stringify(check, null, 2));
+        const list = (xs: { severity: string; title: string; id: string }[]) =>
+          xs.length ? xs.map((x) => `- ${x.severity}: ${x.title} (\`${x.id}\`)`).join("\n") : "- none";
+        return text(
+          [
+            `## Fix check: ${check.verdict}`,
+            "",
+            ...(check.reasons.length ? [`${check.reasons.join("; ")}.`, ""] : []),
+            "**Gone**",
+            list(check.resolved),
+            "",
+            "**New**",
+            list(check.introduced),
+          ].join("\n"),
         );
       } catch (err) {
         return failure(err);
