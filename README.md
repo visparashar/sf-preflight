@@ -315,20 +315,22 @@ console.log(toMarkdown(result));
 ## Performance
 
 Measured on [NPSP](https://github.com/SalesforceFoundation/NPSP) (1,035 Apex classes, 765 fields,
-26 triggers), changing one class, on a 2-core Xeon 2.1 GHz with Node 22 (median of 3):
+26 triggers), changing one class, on a 2-core Xeon 2.8 GHz with Node 22 (median of 3):
 
 | Scenario | Time | Peak memory |
 |---|---:|---:|
-| First run, 1 thread | 26.8 s | 1,309 MB |
-| First run, 2 threads | 22.5 s | 1,763 MB |
-| Repeat run (cached) | 1.0 s | 189 MB |
-| Repeat run after editing one class | 1.3 s | 219 MB |
+| First run, 1 thread | 35.1 s | 1,378 MB |
+| First run, 2 threads | 27.6 s | 1,747 MB |
+| Repeat run (cached) | 0.9 s | 173 MB |
+| Repeat run after editing one class | 1.1 s | 204 MB |
 
 Parsing Apex is nearly all of the cost, so results are cached per file in `~/.cache/sf-preflight`
-(content-hashed; set `PREFLIGHT_CACHE_DIR` to move it or `PREFLIGHT_NO_CACHE=1` to turn it off), and
-a first run parses on worker threads (`PREFLIGHT_JOBS=1` to turn that off). Small projects take
-about a second either way (apex-recipes, 139 classes: 2 s). The editor extension gets the same
-speed-up, so saving a file re-analyzes in about a second. Gains from threads depend on the
+(set `PREFLIGHT_CACHE_DIR` to move it or `PREFLIGHT_NO_CACHE=1` to turn it off), and a first run
+parses on worker threads (`PREFLIGHT_JOBS=1` to turn that off). A cached file whose size and
+modification time haven't changed is not read again; one modified in the last two seconds is
+always checked by its content. Small projects take about a second either way (apex-recipes, 139
+classes: 2 s). The editor extension keeps its analysis worker and cache loaded between runs, so
+analyzing again while you type takes about 0.6 s on NPSP. Gains from threads depend on the
 machine; on this 2-core box they were modest. Run it on your own project:
 
 ```bash

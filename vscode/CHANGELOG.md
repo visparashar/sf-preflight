@@ -1,13 +1,18 @@
 # Changelog
 
-## [0.5.0] - 2026-10-13
+## [Unreleased]
 
 - **Quick fixes** (the light bulb) on sf-preflight problems: open the other files involved; generate Apex tests
   for recursion, validation-rule and loop findings; accept a finding about the org's state as a known issue,
   which adds it to `.preflight-baseline.json` (and sets `"baseline"` in `.preflight.json` the first time) so it
   stops being reported, in the editor, the hook and CI alike.
+- **Faster analysis while typing**: the analysis worker stays up between runs instead of starting for each one,
+  so the analyzer and its parse cache are already loaded. On NPSP, analyzing again after an edit takes about
+  0.6 s instead of 1.2 s. An idle worker stops after five minutes.
+- The extension no longer throws away the command line's parse cache (or the other way round), which cost
+  about 28 s on NPSP each time you switched between them.
 
-## [Unreleased]
+## [0.5.0] - 2026-10-13
 
 - **As you type**: unsaved edits are analyzed after a short pause (`sfPreflight.analyzeOnType`), so findings
   show up while writing, not only after saving.

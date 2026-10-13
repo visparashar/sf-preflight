@@ -7,11 +7,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.11.0] - 2026-10-13
-
 ### Added
 
 - `acceptIntoBaseline`: add one finding to the project's baseline file (the VS Code quick fix uses it).
+
+### Changed
+
+- Faster on large projects, most of all when analyzing again after a small edit. On NPSP, one edited class
+  analyzed with `--baseline base` went from 1.6 s to 0.85 s:
+  - The parse cache checks a file's size and modification time before reading it, and reads and hashes it
+    only when they changed. Files modified within the last two seconds are always checked by content, so a
+    same-size edit is never missed.
+  - Each Apex file is read and hashed once per run, not twice.
+  - The comment-free copy of each class's source is made only when a check needs it.
+  - A long-running process (the editor extension) keeps the parse cache in memory between runs.
+- The command line and the VS Code extension keep separate parse caches. They were sharing one file and,
+  being built differently, each threw the other's away: about 28 s to rebuild on NPSP at every switch. A
+  project's caches for other versions are removed after 14 days unused.
+
+## [0.11.0] - 2026-10-13
 
 ### Added
 
