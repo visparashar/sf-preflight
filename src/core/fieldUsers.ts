@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { readProjectFile } from "./files.js";
 import type { ComponentRef, Finding, OrgModel } from "./types.js";
 import { key, nodes, parseMetadataXml, text, type XmlNode } from "./util.js";
 
@@ -149,7 +150,7 @@ export function fieldUsersOf(model: OrgModel): FieldUser[] {
   if (users) return users;
   const read = (file: string) => {
     try {
-      return readFileSync(path.join(model.projectDir, file), "utf8");
+      return readProjectFile(model, file);
     } catch {
       return undefined;
     }
@@ -174,7 +175,7 @@ export const fieldUsers = (model: OrgModel, object: string, field: string) => {
 export function missingFieldFindings(model: OrgModel, comp: ComponentRef): Finding[] {
   const read = (file: string) => {
     try {
-      return readFileSync(path.join(model.projectDir, file), "utf8");
+      return readProjectFile(model, file);
     } catch {
       return undefined;
     }

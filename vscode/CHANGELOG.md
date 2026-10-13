@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+- **As you type**: unsaved edits are analyzed after a short pause (`sfPreflight.analyzeOnType`), so findings
+  show up while writing, not only after saving.
+- **Precise underlines**: a problem is underlined on the field, rule or class its finding names, or on the
+  statement's line for Apex findings, instead of the first line of the file.
+- **CodeLens** above field, object, validation rule, trigger, class, flow and Lightning component files: who uses
+  it and what runs when its object is saved (`sfPreflight.codeLens`).
+
 ## [0.4.0] - 2026-10-09
 
 - **Risk dashboard**: the change's risk, the quality gate's findings check, and its risk factors

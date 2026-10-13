@@ -25,6 +25,7 @@ import {
 } from "./agentImpact.js";
 import { buildCoverage } from "./coverage.js";
 import { fieldUsers, isNamespaced, missingFieldFindings, parseFieldUser } from "./fieldUsers.js";
+import { readProjectFile } from "./files.js";
 import {
   callersOfClass,
   callersOfFlow,
@@ -167,7 +168,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   const addFinding = (f: Finding) => findings.push(f);
   const readCurrent = (file: string): string | undefined => {
     try {
-      return readFileSync(path.join(model.projectDir, file), "utf8");
+      return readProjectFile(model, file);
     } catch {
       return undefined;
     }

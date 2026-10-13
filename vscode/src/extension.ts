@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFile } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import * as vscode from "vscode";
 import type { FailOn } from "../../src/core/config.js";
+import type { Insight } from "../../src/core/insight.js";
 import { installSkill } from "../../src/core/skill.js";
 import type { AnalysisResult, SaveEvent, SaveProcedure, Severity } from "../../src/core/types.js";
 import { addToHistory, type HistoryEntry, historyEntryOf, readHistory } from "./dashboard.js";
 import { DashboardPanel, type DashboardSource } from "./dashboard-panel.js";
 import { GraphPanel, type GraphSource } from "./graph-panel.js";
-import { isMetadataFile, problemsOf, RULES_URL, statusOf, type TreeNode, treeOf } from "./model.js";
+import { isMetadataFile, locate, problemsOf, RULES_URL, type Span, statusOf, type TreeNode, treeOf } from "./model.js";
 import type { WorkerRequest } from "./worker.js";
 
 /** The parts of VS Code's MCP API (1.101+) the extension uses; absent in older editors. */
@@ -74,6 +75,9 @@ function viewerUrl(): string {
     return VIEWER_URL;
   }
 }
+
+/** Pause after the last keystroke before analyzing unsaved edits. */
+const TYPING_DELAY_MS = 1200;
 
 /** Projects analyzed at the same time, so a monorepo doesn't load every project at once. */
 const MAX_PARALLEL = 2;
@@ -216,8 +220,32 @@ class BlastRadiusProvider implements vscode.TreeDataProvider<TreeNode> {
   }
 }
 
+/** Text of a file as the editor shows it: the open document's (unsaved edits included), else from disk. */
+function openText(file: string): string | undefined {
+  const doc = vscode.workspace.textDocuments.find((d) => d.uri.scheme === "file" && d.uri.fsPath === file);
+  if (doc) return doc.getText();
+  try {
+    return statSync(file).size > 2_000_000 ? undefined : readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+/** Unsaved metadata edits in a project, by absolute path. */
+function unsavedIn(dir: string): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const d of vscode.workspace.textDocuments) {
+    if (d.isDirty && d.uri.scheme === "file" && isMetadataFile(d.uri.fsPath) && inside(dir, d.uri.fsPath))
+      out[d.uri.fsPath] = d.getText();
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const projects = new Map<string, ProjectState>();
+  /** Bumped after every analysis; cached CodeLens insights from an older one are recomputed. */
+  let generation = 0;
+  const lensChanged = new vscode.EventEmitter<void>();
   const diagnostics = vscode.languages.createDiagnosticCollection("sf-preflight");
   const tree = new BlastRadiusProvider(() => [...projects.values()]);
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
@@ -237,11 +265,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const configured = config().get<string>("minSeverity") as Severity;
     const minSeverity = SEVERITIES.includes(configured) ? configured : "low";
     const byFile = new Map<string, vscode.Diagnostic[]>();
+    const texts = new Map<string, string | undefined>();
+    const textOf = (file: string): string | undefined => {
+      if (!texts.has(file)) texts.set(file, openText(file));
+      return texts.get(file);
+    };
     for (const p of projects.values()) {
       if (!p.result) continue;
       for (const prob of problemsOf(p.result, minSeverity)) {
+        // Underline the element the finding is about, not the whole first line.
+        const text = textOf(prob.file);
+        const at: Span = text === undefined ? { line: prob.line, start: 0, end: 1000 } : locate(text, prob);
         const d = new vscode.Diagnostic(
-          new vscode.Range(prob.line, 0, prob.line, 1000),
+          new vscode.Range(at.line, at.start, at.line, at.end),
           prob.message,
           SEVERITY[prob.severity],
         );
@@ -294,6 +330,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           projectDir: p.dir,
           base,
           depth: config(p.dir).get<number>("depth") ?? 4,
+          overlay: unsavedIn(p.dir),
         }),
       );
       value.result.base = label;
@@ -328,6 +365,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       } while (p.again && projects.get(p.dir) === p);
     })().finally(() => {
       p.inflight = undefined;
+      generation++;
+      lensChanged.fire();
       render();
     });
     render();
@@ -383,6 +422,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Re-analyze shortly after metadata changes, whoever made them (the editor, a terminal, git,
   // sf project retrieve); several changes in a row trigger one run.
   const timers = new Map<string, NodeJS.Timeout>();
+  const typingTimers = new Map<string, NodeJS.Timeout>();
   function scheduleProject(p: ProjectState): void {
     if (!config(p.dir).get<boolean>("analyzeOnSave", true)) return;
     clearTimeout(timers.get(p.dir));
@@ -424,6 +464,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     headWatcher.onDidChange(onCheckout),
     headWatcher.onDidCreate(onCheckout),
     vscode.workspace.onDidSaveTextDocument((doc) => schedule(doc.uri.fsPath)),
+    // As you type: unsaved edits are analyzed after a short pause (the editor's text, not the disk's).
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      const file = e.document.uri.fsPath;
+      if (e.document.uri.scheme !== "file" || !e.contentChanges.length || !isMetadataFile(file)) return;
+      const p = projectOf(file);
+      if (!p || !config(p.dir).get<boolean>("analyzeOnType", true)) return;
+      clearTimeout(typingTimers.get(p.dir));
+      typingTimers.set(
+        p.dir,
+        setTimeout(() => {
+          typingTimers.delete(p.dir);
+          void analyze(p);
+        }, TYPING_DELAY_MS),
+      );
+    }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       for (const p of projects.values()) {
         const uri = vscode.Uri.file(p.dir);
@@ -437,6 +492,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     {
       dispose: () => {
         for (const t of timers.values()) clearTimeout(t);
+        for (const t of typingTimers.values()) clearTimeout(t);
       },
     },
   );
@@ -445,6 +501,49 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const doc = await vscode.workspace.openTextDocument({ language: "markdown", content });
     await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
   }
+
+  // Above each metadata file: who uses it and what runs around it, before anything is changed.
+  // Computed once per analysis (the project may have changed), on a worker.
+  const insights = new Map<string, { generation: number; value: Promise<Insight> }>();
+  const insightOf = (p: ProjectState, file: string): Promise<Insight> => {
+    const cached = insights.get(file);
+    if (cached && cached.generation === generation) return cached.value;
+    const value = slot(() =>
+      runWorker<Insight>(context, { kind: "insight", projectDir: p.dir, file, overlay: unsavedIn(p.dir) }),
+    );
+    insights.set(file, { generation, value });
+    return value;
+  };
+  context.subscriptions.push(
+    lensChanged,
+    vscode.languages.registerCodeLensProvider([{ scheme: "file", pattern: "**/*.{cls,trigger,xml}" }], {
+      onDidChangeCodeLenses: lensChanged.event,
+      provideCodeLenses: async (doc) => {
+        const file = doc.uri.fsPath;
+        const p = projectOf(file);
+        if (!p || !isMetadataFile(file) || !config(p.dir).get<boolean>("codeLens", true)) return [];
+        try {
+          const insight = await insightOf(p, file);
+          if (!insight.summary) return [];
+          return [
+            new vscode.CodeLens(new vscode.Range(0, 0, 0, 0), {
+              title: `sf-preflight: ${insight.summary}`,
+              tooltip: insight.details.slice(0, 15).join("\n") || insight.summary,
+              command: "sfPreflight.showInsight",
+              arguments: [file, insight],
+            }),
+          ];
+        } catch {
+          return [];
+        }
+      },
+    }),
+    vscode.commands.registerCommand("sfPreflight.showInsight", async (file: string, insight: Insight) => {
+      const lines = [`# ${path.basename(file)}`, "", insight.summary, ""];
+      for (const d of insight.details) lines.push(`- ${d}`);
+      await showMarkdown(lines.join("\n"));
+    }),
+  );
 
   /** Run a command, showing a failure as an error message rather than VS Code's generic one. */
   const guarded = (fn: () => Promise<void>) => async (): Promise<void> => {

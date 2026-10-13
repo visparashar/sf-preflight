@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { readProjectFile } from "./files.js";
 import { filesNaming } from "./references.js";
 import type { ComponentRef, Finding, OrgModel } from "./types.js";
 import { bool, key, nodes, parseMetadataXml, text, uniq, type XmlNode } from "./util.js";
@@ -125,7 +126,7 @@ function filesCallingHost(model: OrgModel, host: string, exceptFile: string): st
     if (ref?.type === "ApexClass" && model.classes.get(key(ref.name))?.isTest) continue;
     let t: string;
     try {
-      t = readFileSync(path.join(model.projectDir, file), "utf8");
+      t = readProjectFile(model, file);
     } catch {
       continue;
     }
@@ -143,7 +144,7 @@ function namedCredentialsUsing(model: OrgModel, external: string): IntegrationDe
     if (c.metadataType !== "NamedCredential") continue;
     let xml: string | undefined;
     try {
-      xml = readFileSync(path.join(model.projectDir, c.file), "utf8");
+      xml = readProjectFile(model, c.file);
     } catch {
       xml = undefined;
     }
@@ -329,7 +330,7 @@ export function outboundMessagesOf(model: OrgModel): OutboundMessageDef[] {
     for (const c of model.components.values()) {
       if (c.type !== "WorkflowRule") continue;
       try {
-        all.push(...parseOutboundMessages(readFileSync(path.join(model.projectDir, c.file), "utf8"), c.name, c.file));
+        all.push(...parseOutboundMessages(readProjectFile(model, c.file), c.name, c.file));
       } catch {
         // unreadable
       }

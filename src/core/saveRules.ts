@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { readProjectFile } from "./files.js";
 import { writersOf } from "./graph.js";
 import {
   parseApprovalProcess,
@@ -63,7 +64,7 @@ export function saveRulesOf(model: OrgModel): SaveRuleDef[] {
   for (const c of model.components.values()) {
     if (!c.metadataType || !SAVE_RULE_TYPES.has(c.metadataType)) continue;
     try {
-      rules.push(...parseSaveRuleFile(c, readFileSync(path.join(model.projectDir, c.file), "utf8")));
+      rules.push(...parseSaveRuleFile(c, readProjectFile(model, c.file)));
     } catch {
       model.warnings.push(`Could not parse ${c.file}.`);
     }
@@ -211,7 +212,7 @@ export function platformEventParties(model: OrgModel, event: string) {
     const named = lc.files.some((f) => {
       if (/__tests__/.test(f)) return false;
       try {
-        return channel.test(readFileSync(path.join(model.projectDir, f), "utf8"));
+        return channel.test(readProjectFile(model, f));
       } catch {
         return false;
       }

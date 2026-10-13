@@ -376,6 +376,8 @@ export interface LightningDef {
 
 export interface OrgModel {
   projectDir: string;
+  /** Unsaved editor text by project-relative path, read instead of the file on disk. */
+  overlay?: Map<string, string>;
   sourceRoots: string[];
   objects: Map<string, ObjectDef>;
   validationRules: ValidationRuleDef[];

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { readProjectFile } from "./files.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
 import { filesNaming } from "./references.js";
 import type { Finding, ObjectGrant, OrgModel, PermissionContainerDef } from "./types.js";
@@ -373,7 +374,7 @@ export function permissionSetGroups(model: OrgModel) {
       if (c.metadataType !== "PermissionSetGroup") continue;
       let xml: string | undefined;
       try {
-        xml = readFileSync(path.join(model.projectDir, c.file), "utf8");
+        xml = readProjectFile(model, c.file);
       } catch {
         xml = undefined;
       }

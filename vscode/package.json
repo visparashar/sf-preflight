@@ -177,6 +177,18 @@
           "description": "Analyze again after saving Salesforce metadata.",
           "scope": "resource"
         },
+        "sfPreflight.analyzeOnType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Analyze unsaved edits to Salesforce metadata after a short pause in typing, so findings appear while you write.",
+          "scope": "resource"
+        },
+        "sfPreflight.codeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show above each metadata file who uses it and what runs when its object is saved.",
+          "scope": "resource"
+        },
         "sfPreflight.minSeverity": {
           "type": "string",
           "enum": [

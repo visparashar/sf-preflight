@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { readProjectFile } from "./files.js";
 import { looksLikeSObject } from "./standardObjects.js";
 import type { Change, ComponentRef, ComponentType, Coverage, OrgModel } from "./types.js";
 
@@ -94,7 +95,7 @@ export function buildCoverage(model: OrgModel, changes: Change[]): Coverage | un
       // A component's own files (a bundle's .js/.html, a class and its meta file) are not mentions.
       if (ref.type === "Metadata" && ref.metadataType === t.type && ref.name === t.name) continue;
       for (const { tok, re } of patterns[i] ?? []) {
-        text ??= readText(model.projectDir, file) ?? "";
+        text ??= readText(model, file) ?? "";
         if (text.includes(tok) && re.test(text)) {
           t.found.add(file);
           break;
@@ -123,9 +124,9 @@ export function buildCoverage(model: OrgModel, changes: Change[]): Coverage | un
   };
 }
 
-function readText(projectDir: string, file: string): string | undefined {
+function readText(model: OrgModel, file: string): string | undefined {
   try {
-    const text = readFileSync(path.join(projectDir, file), "utf8");
+    const text = readProjectFile(model, file);
     return text.length > MAX_FILE_BYTES ? undefined : text;
   } catch {
     return undefined;
