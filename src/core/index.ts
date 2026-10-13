@@ -55,6 +55,17 @@ export {
   verifyEvidence,
 } from "./evidence.js";
 export {
+  type ApplyResult,
+  applyFixes,
+  type Fix,
+  type FixReport,
+  findFixes,
+  fixesToMarkdown,
+  fixId,
+  type RejectedFix,
+} from "./fix.js";
+export { FIXABLE_RULES, type FixKind } from "./fixers.js";
+export {
   type Approval,
   evaluateGate,
   type GateCheck,

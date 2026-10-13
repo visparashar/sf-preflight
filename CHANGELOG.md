@@ -9,6 +9,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Checked fixes**: `preflight fix` proposes edits for findings with a mechanical fix and checks each one
+  by analyzing the change again with it applied; a fix is kept only if its finding is gone and no new high or
+  medium finding appears. `--apply` writes the safe ones (`--kinds`, `--only <id>` for more); a file that changed
+  since it was checked is never overwritten.
+  - safe: `http` → `https` for named credentials, remote sites, CSP sites and outbound messages (protocol
+    security back on); a committed consumer secret removed; confirmation required on agent actions that delete.
+  - undo: View All / Modify All, delete, system permissions and new field edit access taken back; a sharing
+    default restored; removed picklist values restored in their original place.
+  - review: references to a renamed component's old name updated; an outbound message's session ID stopped.
+  - `suggest_fixes` MCP tool: the same checked diffs for coding agents (it writes nothing).
+
 - **Update notice**: when a newer release is on npm, a short banner after a command says so, with the update
   command for how sf-preflight was started (`npx`, project or global install). Checked at most once a day by
   a detached process, so commands never wait; shown at most once a day, only in an interactive terminal (not in

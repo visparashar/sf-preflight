@@ -161,6 +161,7 @@ describe("MCP server", () => {
       "find_field_references",
       "generate_tests",
       "plan_rollback",
+      "suggest_fixes",
     ]);
     expect(tools.every((t) => t.annotations?.readOnlyHint === true)).toBe(true);
     expect(client.getInstructions()).toContain("analyze_change");
@@ -183,6 +184,23 @@ describe("MCP server", () => {
     expect(out).toContain("## Preflight: 🔴 HIGH risk");
     expect(out).toContain("Opportunity.Contract_Signed_Date__c");
     git("checkout", "-q", "--", ".");
+  });
+
+  it("suggest_fixes returns checked diffs and writes nothing", async () => {
+    const file = `${SRC}/permissionsets/Agent_Runtime_User.permissionset-meta.xml`;
+    const before = readFileSync(path.join(project, file), "utf8");
+    const res = await client.callTool({
+      name: "suggest_fixes",
+      arguments: { project_dir: "sfdx", files: [file], rules: ["permission-escalation"], format: "json" },
+    });
+    expect(res.isError).toBeFalsy();
+    const json = JSON.parse(textOf(res));
+    expect(json.fixes.length).toBeGreaterThan(0);
+    expect(
+      json.fixes.every((f: { rule: string; kind: string }) => f.rule === "permission-escalation" && f.kind === "undo"),
+    ).toBe(true);
+    expect(json.fixes[0].diff).toContain("-        <modifyAllRecords>true</modifyAllRecords>");
+    expect(readFileSync(path.join(project, file), "utf8")).toBe(before);
   });
 
   it("analyze_change supports explicit files and JSON", async () => {

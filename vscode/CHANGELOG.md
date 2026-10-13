@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- **Fix it**: when a problem has a checked fix (see `preflight fix`), it is the first quick fix in the light
+  bulb. Safe fixes apply directly; fixes that undo part of the change or should be read open VS Code's preview
+  first. A fix is never applied to a file that changed since it was checked.
 - **Update notification**: when a newer sf-preflight is out, a notification offers **Update** (opens the
   extension's page), **What's new** and **Skip this version**. Checked at most once a day against Open VSX (only
   the version number is requested). Off with `sfPreflight.checkForUpdates`.

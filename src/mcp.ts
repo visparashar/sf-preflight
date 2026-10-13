@@ -10,6 +10,8 @@ import {
   evaluateGate,
   explainAgent,
   fieldReferences,
+  findFixes,
+  fixesToMarkdown,
   loadConfig,
   loadProject,
   planRollback,
@@ -32,6 +34,9 @@ permission sets):
    they are acceptable. (Approval checks in the gate can only pass once a person reviews.)
 3. Call generate_tests and add the generated Apex test classes (it returns the code; write the
    files yourself), then review their NOTE comments.
+For findings with a mechanical fix, call suggest_fixes: it returns diffs that sf-preflight has
+already checked (the finding is gone and nothing new appears). Apply the ones that fit what the
+user asked for; fixes of kind "undo" reverse part of the change, so confirm those with the user.
 Use explain_save_order to understand what already runs on an object before adding automation,
 find_field_references before renaming, retyping or deleting a field, and explain_agent before
 changing anything an Agentforce agent action calls. When a recent change broke something in
@@ -107,6 +112,48 @@ export function createMcpServer(opts: McpServerOptions): McpServer {
         // The project's quality gate, so agents know what CI will require (approvals aren't known here).
         result.gate = evaluateGate({ result, config: loadConfig(dir).config.gate });
         return text(args.format === "json" ? JSON.stringify(result, null, 2) : toMarkdown(result));
+      } catch (err) {
+        return failure(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "suggest_fixes",
+    {
+      title: "Suggest checked fixes for a change's findings",
+      description:
+        "Propose fixes for the findings of a change, as unified diffs. Each fix was checked by analyzing the " +
+        "change again with it applied: its finding is gone and no new high or medium finding appears. Kinds: " +
+        '"safe" (keeps what the change was for), "undo" (puts one part of the change back as on the base ' +
+        'branch) and "review" (mechanical, read it). Nothing is written: apply the diffs yourself.',
+      inputSchema: {
+        project_dir: projectDirSchema,
+        base: z.string().optional().describe("Git base ref, e.g. origin/main (default: HEAD)"),
+        files: z
+          .array(z.string())
+          .optional()
+          .describe("Fix the findings of these metadata files instead of a git diff (project-relative or absolute)"),
+        rules: z.array(z.string()).optional().describe("Only fixes for these rule ids"),
+        format: z.enum(["markdown", "json"]).optional().describe("Report format (default: markdown)"),
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const report = findFixes(
+          {
+            projectDir: projectDir(args.project_dir),
+            base: args.files?.length ? undefined : (args.base ?? "HEAD"),
+            files: args.files,
+          },
+          { rules: args.rules },
+        );
+        return text(
+          args.format === "json"
+            ? JSON.stringify({ fixes: report.fixes, rejected: report.rejected, withoutFix: report.withoutFix }, null, 2)
+            : fixesToMarkdown(report),
+        );
       } catch (err) {
         return failure(err);
       }

@@ -20,6 +20,18 @@ order, per object and event), `cycles[]`, `agents[]` (affected Agentforce action
 `--org <alias>` (beta) adds read-only org context: record volumes, automation that exists only
 in the org, permission assignments, an agent runtime user's real access.
 
+## Fix findings
+
+| Goal | MCP | CLI |
+|---|---|---|
+| Checked fixes as diffs (nothing written) | `suggest_fixes` (same arguments as `analyze_change`, plus `rules`) | `fix --base HEAD` (`--format json` for the diffs as data) |
+| Write the safe fixes | apply the diffs yourself | `fix --base HEAD --apply` |
+| Write chosen fixes, whatever their kind | apply those diffs | `fix --base HEAD --apply --only <id...>` |
+
+Each fix has `id`, `rule`, `finding` (the finding's title), `label`, `kind` (`safe`, `undo`, `review`),
+`note`, `edits[]` (`file`, `before`, `after`) and `diff`. Confirm `undo` fixes with the user: they reverse part
+of the change.
+
 ## Understand before changing
 
 | Goal | MCP | CLI |

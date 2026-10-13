@@ -5,6 +5,8 @@ import path from "node:path";
 import * as vscode from "vscode";
 import { acceptIntoBaseline, CONDITION_RULES } from "../../src/core/baseline.js";
 import type { FailOn } from "../../src/core/config.js";
+import { type Fix, fixId } from "../../src/core/fix.js";
+import { FIXABLE_RULES } from "../../src/core/fixers.js";
 import type { Insight } from "../../src/core/insight.js";
 import { installSkill } from "../../src/core/skill.js";
 import type { AnalysisResult, SaveEvent, SaveProcedure, Severity } from "../../src/core/types.js";
@@ -51,6 +53,10 @@ interface ProjectState {
   /** The analysis in progress; changes while it runs ask for one more run afterwards. */
   inflight?: Promise<void>;
   again?: boolean;
+  /** What the last analysis was asked, so fixes are computed for the same change. */
+  request?: { base: string; depth: number; overlay?: Record<string, string> };
+  /** Checked fixes for `result`, computed when a quick fix is first asked for. */
+  fixes?: { for: AnalysisResult; promise: Promise<Fix[]> };
 }
 
 const SEVERITY: Record<Severity, vscode.DiagnosticSeverity> = {
@@ -343,15 +349,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     try {
       const { base, label } = await resolveBase(p.dir);
       p.branch = (await git(p.dir, ["rev-parse", "--abbrev-ref", "HEAD"]).catch(() => "")) || undefined;
+      const request = { base, depth: config(p.dir).get<number>("depth") ?? 4, overlay: unsavedIn(p.dir) };
       const value = await slot(() =>
         runWorker<{ result: AnalysisResult; markdown: string; failOn: FailOn }>(context, {
           kind: "analyze",
           projectDir: p.dir,
-          base,
-          depth: config(p.dir).get<number>("depth") ?? 4,
-          overlay: unsavedIn(p.dir),
+          ...request,
         }),
       );
+      p.request = request;
       value.result.base = label;
       p.result = value.result;
       p.markdown = value.markdown;
@@ -564,18 +570,51 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
+  /** Checked fixes for the project's last analysis, computed once per analysis (each fix costs one). */
+  const fixesOf = (p: ProjectState): Promise<Fix[]> => {
+    if (!p.result || !p.request) return Promise.resolve([]);
+    if (p.fixes?.for !== p.result) {
+      const request = p.request;
+      p.fixes = {
+        for: p.result,
+        promise: slot(() => runWorker<Fix[]>(context, { kind: "fixes", projectDir: p.dir, ...request })).catch(
+          (err: Error) => {
+            output.appendLine(`${new Date().toISOString()} ${p.dir}: fixes: ${err.message}`);
+            return [];
+          },
+        ),
+      };
+    }
+    return p.fixes.promise;
+  };
+
   // Quick fixes on sf-preflight's problems: open the other files involved, generate the tests that
   // exercise the change, or accept a finding about the org's state as known (the baseline).
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider(
       [{ scheme: "file", pattern: "**/*.{cls,trigger,xml,js,html,cmp,page,component,agent}" }],
       {
-        provideCodeActions: (doc, _range, ctx) => {
+        provideCodeActions: async (doc, _range, ctx) => {
           const actions: vscode.CodeAction[] = [];
+          const p = projectOf(doc.uri.fsPath);
           for (const d of ctx.diagnostics) {
             if (d.source !== "sf-preflight") continue;
             const rule = typeof d.code === "object" && d.code ? String(d.code.value) : String(d.code ?? "");
             const title = d.message.split("\n")[0] ?? "";
+            // A checked fix for this finding, first: it is the action that removes the problem.
+            if (p && FIXABLE_RULES.has(rule)) {
+              const fix = (await fixesOf(p)).find((f) => f.id === fixId({ rule, title }));
+              if (fix) {
+                const a = new vscode.CodeAction(
+                  `Fix: ${fix.label}${fix.kind === "safe" ? "" : fix.kind === "undo" ? " (undoes part of the change)" : " (preview)"}`,
+                  vscode.CodeActionKind.QuickFix,
+                );
+                a.command = { command: "sfPreflight.applyFix", title: "Apply fix", arguments: [p.dir, fix] };
+                a.diagnostics = [d];
+                a.isPreferred = fix.kind === "safe";
+                actions.push(a);
+              }
+            }
             for (const r of (d.relatedInformation ?? []).slice(0, 3)) {
               const a = new vscode.CodeAction(
                 `Open ${path.basename(r.location.uri.fsPath)} (also involved)`,
@@ -610,6 +649,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       },
       { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
     ),
+    vscode.commands.registerCommand("sfPreflight.applyFix", async (dir: string, fix: Fix) => {
+      const p = projects.get(dir) ?? [...projects.values()].find((x) => x.dir === dir);
+      if (!p) return;
+      try {
+        const edit = new vscode.WorkspaceEdit();
+        for (const e of fix.edits) {
+          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(p.dir, e.file)));
+          const text = doc.getText();
+          if (text !== e.before) {
+            void vscode.window.showWarningMessage(
+              `sf-preflight: ${e.file} changed since this fix was checked. Analyzing again for a fresh one.`,
+            );
+            void analyze(p);
+            return;
+          }
+          // Undo and review fixes open VS Code's preview, so the diff is read before it lands.
+          edit.replace(doc.uri, new vscode.Range(doc.positionAt(0), doc.positionAt(text.length)), e.after, {
+            needsConfirmation: fix.kind !== "safe",
+            label: fix.label,
+          });
+        }
+        if (!(await vscode.workspace.applyEdit(edit))) return;
+        if (fix.note) void vscode.window.showInformationMessage(`sf-preflight: ${fix.note}`);
+        // Unsaved edits are analyzed as typed; analyze now in case that is turned off.
+        void analyze(p);
+      } catch (err) {
+        void vscode.window.showErrorMessage(`sf-preflight: ${(err as Error).message}`);
+      }
+    }),
     vscode.commands.registerCommand("sfPreflight.acceptFinding", async (file: string, rule: string, title: string) => {
       const p = projectOf(file);
       const finding = p?.result?.findings.find((f) => f.rule === rule && f.title === title);
