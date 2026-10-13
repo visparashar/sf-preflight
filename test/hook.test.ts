@@ -54,7 +54,7 @@ describe("pre-commit hook", () => {
     expect(analyzeChange({ projectDir: dir, staged: true }).result.warnings.join()).toContain("unstaged edits");
   });
 
-  it("installs an executable hook, keeps someone else's, and uninstalls only its own", () => {
+  it("installs an executable hook, updates and uninstalls it", () => {
     const r = installHook(dir, { version: "9.9.9" });
     expect(r.status).toBe("installed");
     const fd = openSync(r.file, "r");
@@ -62,10 +62,15 @@ describe("pre-commit hook", () => {
     expect(readFileSync(fd, "utf8")).toContain(HOOK_MARKER);
     closeSync(fd);
     expect(installHook(dir, { version: "9.9.9" }).status).toBe("updated");
-    writeFileSync(r.file, "#!/bin/sh\necho mine\n");
+    expect(uninstallHook(dir).removed).toBe(true);
+  });
+
+  it("leaves someone else's hook alone", () => {
+    const theirs = path.join(dir, ".git", "hooks", "pre-commit");
+    writeFileSync(theirs, "#!/bin/sh\necho mine\n");
     expect(installHook(dir, { version: "9.9.9" }).status).toBe("exists-other");
     expect(uninstallHook(dir).removed).toBe(false);
-    expect(readFileSync(r.file, "utf8")).toContain("echo mine");
+    expect(readFileSync(theirs, "utf8")).toContain("echo mine");
   });
 
   it("quotes the project path in the script", () => {
