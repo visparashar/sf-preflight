@@ -56,3 +56,15 @@ Issues of particular interest include:
   names into its report,
 - any way for `rollback --restore` to write outside the project's tracked files or over
   uncommitted changes.
+
+## Verifying releases
+
+Every release on GitHub carries the package (the npm tarball, or the VS Code extension's `.vsix`) and a
+signed build provenance bundle (`*.sigstore.json`), produced by the release workflow. Check that a file was
+built by this repository's workflow:
+
+```bash
+gh attestation verify sf-preflight-0.10.1.tgz --repo visparashar/sf-preflight
+```
+
+npm packages are also published with npm provenance (shown on npmjs.com).

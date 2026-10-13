@@ -83,7 +83,7 @@
       },
       {
         "command": "sfPreflight.chooseBase",
-        "title": "Compare with branch\u2026",
+        "title": "Compare with branch…",
         "category": "sf-preflight",
         "icon": "$(git-compare)"
       },
@@ -113,7 +113,7 @@
       },
       {
         "command": "sfPreflight.explainSaveOrder",
-        "title": "Explain what runs when an object is saved\u2026",
+        "title": "Explain what runs when an object is saved…",
         "category": "sf-preflight"
       },
       {
@@ -168,7 +168,7 @@
         "sfPreflight.baseRef": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Branch or commit to compare with. Empty: the repository's default branch (`origin/HEAD`, `origin/main`, \u2026), from where your branch left it. `HEAD`: only uncommitted changes.",
+          "markdownDescription": "Branch or commit to compare with. Empty: the repository's default branch (`origin/HEAD`, `origin/main`, …), from where your branch left it. `HEAD`: only uncommitted changes.",
           "scope": "resource"
         },
         "sfPreflight.analyzeOnSave": {
@@ -238,6 +238,11 @@
     "virtualWorkspaces": {
       "supported": false,
       "description": "sf-preflight reads the project from disk and runs git."
+    }
+  },
+  "overrides": {
+    "ovsx": {
+      "@vscode/vsce": "$@vscode/vsce"
     }
   }
 }

@@ -87,6 +87,8 @@ const MAX_LISTED = 8;
 /** Elements whose value is a component's own name or display text, never a reference. */
 const DECLARING =
   "fullName|label|masterLabel|pluralLabel|description|shortDescription|value|helpText|inlineHelpText|errorMessage";
+/** Salesforce API name suffixes (`__c`, `__e`, `__mdt`, ...): names that end in one are unique enough to match anywhere. */
+const SF_SUFFIX = /__(?:c|e|mdt|x|b|r|kav|share|history|feed|p|chn|dll)$/i;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const typeOf = (c: ComponentRef) => c.metadataType ?? c.type;
@@ -100,7 +102,7 @@ function namesOf(c: ComponentRef): { qualified?: string; plain: string } {
   const cut = Math.max(c.name.lastIndexOf("/"), c.name.lastIndexOf("."));
   if (cut > 0) return { qualified: c.name, plain: c.name.slice(cut + 1) };
   // `Invoice__c`, `Order_Event__e`: unique enough on its own.
-  if (/__[a-z]+$/i.test(c.name)) return { qualified: c.name, plain: c.name };
+  if (SF_SUFFIX.test(c.name)) return { qualified: c.name, plain: c.name };
   // Layout names (`Account-Account Layout`) contain a dash.
   if (c.name.includes("-")) return { qualified: c.name, plain: c.name };
   return { plain: c.name };
@@ -118,7 +120,7 @@ export function referencePatterns(c: ComponentRef): RegExp[] {
   const sources: string[] = [];
   if (qualified && !syntax.only) sources.push(`(?<![\\w$./-])${escapeRe(qualified)}(?![\\w/-])`);
   // `Old__c`, `Invoice__c`: a whole word anywhere (code names fields and objects unquoted).
-  if (!syntax.only && /__[a-z]+$/i.test(plain) && plain !== qualified) sources.push(`(?<![\\w$])${n}(?![\\w])`);
+  if (!syntax.only && SF_SUFFIX.test(plain) && plain !== qualified) sources.push(`(?<![\\w$])${n}(?![\\w])`);
   sources.push(...(syntax.patterns?.(n) ?? []));
   for (const el of syntax.elements ?? []) sources.push(`<${el}>\\s*${n}\\s*</${el}>`);
   if (!syntax.only && distinctive(plain)) {
@@ -176,7 +178,7 @@ export function needsReferenceCheck(c: ComponentRef): boolean {
   if (PRECISE_ON_DELETE.has(c.type) || PRECISE_ON_DELETE.has(typeOf(c))) return false;
   if (c.type === "ObjectChild" && /\.recordType-meta\.xml$/.test(c.file)) return false;
   // A standard object's file leaving the repo doesn't delete the object.
-  if (c.type === "CustomObject" && !/__[a-z]+$/i.test(c.name)) return false;
+  if (c.type === "CustomObject" && !SF_SUFFIX.test(c.name)) return false;
   return c.type !== "Other";
 }
 

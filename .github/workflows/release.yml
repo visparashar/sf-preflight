@@ -62,7 +62,9 @@ jobs:
     environment: npm
     permissions:
       contents: write # create the GitHub release
-      id-token: write # npm provenance / trusted publishing
+      id-token: write # npm provenance / trusted publishing, and signing the release assets
+      attestations: write # build provenance for the release tarball
+      artifact-metadata: write
     env:
       TAG: ${{ needs.plan.outputs.tag }}
     steps:
@@ -106,6 +108,24 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
+      # The same package as on npm, attached to the release with a signed provenance bundle, so it can be
+      # checked with `gh attestation verify` (and counts as a signed release).
+      - name: Pack the release tarball
+        id: pack
+        run: echo "file=$(npm pack --silent | tail -n 1)" >> "$GITHUB_OUTPUT"
+      - name: Sign the tarball (build provenance)
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.pack.outputs.file }}
+      - name: Attach the tarball and its signature to the release
+        run: |
+          cp "$BUNDLE" "$FILE.sigstore.json"
+          gh release upload "$TAG" "$FILE" "$FILE.sigstore.json" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILE: ${{ steps.pack.outputs.file }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
       - name: Move the major version tag for the GitHub Action (e.g. v0)
         run: |
           MAJOR="${TAG%%.*}"
