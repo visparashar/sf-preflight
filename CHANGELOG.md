@@ -17,7 +17,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     security back on); a committed consumer secret removed; confirmation required on agent actions that delete.
   - undo: View All / Modify All, delete, system permissions and new field edit access taken back; a sharing
     default restored; removed picklist values restored in their original place.
-  - review: references to a renamed component's old name updated; an outbound message's session ID stopped.
+  - review: references to a renamed component's old name updated; an outbound message's session ID stopped; a Remote Action class made `System.Callable`, with a `call` method
+    that runs the methods the scripts name; `update`/`insert`/`delete` of a loop variable moved to one save after
+    the loop (only in the plain shape: no `return`, `try` or later use of the record).
   - `suggest_fixes` MCP tool: the same checked diffs for coding agents (it writes nothing).
 
 - **Update notice**: when a newer release is on npm, a short banner after a command says so, with the update

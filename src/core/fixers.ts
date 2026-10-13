@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { callableTemplate, dmlOutOfLoop } from "./apexFixers.js";
 import { classifyPath } from "./project.js";
 import { namesOf, referencePatterns } from "./references.js";
 import type { AnalysisResult, Finding } from "./types.js";
@@ -429,6 +430,8 @@ const FIXERS: Record<string, Fixer[]> = {
   "sharing-model-opened": [sharingUndo],
   "picklist-value-removed": [picklistUndo],
   "renamed-still-named": [renamedReferences],
+  "omnistudio-remote-not-callable": [callableTemplate],
+  "dml-or-soql-in-loop": [dmlOutOfLoop],
 };
 
 export const FIXABLE_RULES: ReadonlySet<string> = new Set(Object.keys(FIXERS));
