@@ -182,7 +182,7 @@ appears. Each fix has a kind:
 |---|---|---|
 | **safe** | One right answer that keeps what the change was for | Named credential, remote site, CSP site or outbound message on `http` → `https` (and protocol security back on); a consumer secret removed from a connected app file; confirmation required on an agent action that deletes records |
 | **undo** | Puts one part of the change back as it was on the base branch | View All / Modify All, delete, a system permission or field edit taken back; a sharing default restored; removed picklist values restored, in their old place |
-| **review** | Mechanical, but read it | References still using a renamed component's old name updated; an outbound message stopped from sending a session ID |
+| **review** | Mechanical, but read it | References still using a renamed component's old name updated; an outbound message stopped from sending a session ID; a Remote Action class made `Callable` (dispatching to the methods the scripts call); a record saved once after a simple loop instead of inside it |
 
 `--apply` writes only the safe ones; add `--kinds safe,undo,review` for more, or `--only <id>` for exactly the
 fixes you name. A file that changed since it was checked is never overwritten. Findings that need a decision
