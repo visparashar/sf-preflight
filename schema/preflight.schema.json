@@ -22,6 +22,11 @@
         }
       }
     },
+    "baseline": {
+      "description": "Report only findings the change introduces: \"base\" compares with the base ref; a path (inside the project) uses a baseline file written by `preflight baseline`.",
+      "type": "string",
+      "minLength": 1
+    },
     "gate": {
       "description": "Quality gate policy, evaluated with --gate and by the GitHub Action.",
       "type": "object",

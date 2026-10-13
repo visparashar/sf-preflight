@@ -97,7 +97,7 @@ describe("pre-commit hook", () => {
     git("add", FIELD);
     const blocked = commit("risky");
     expect(blocked.status).not.toBe(0);
-    expect(blocked.stderr).toContain("sf-preflight: HIGH risk in 1 staged component");
+    expect(blocked.stderr).toContain("sf-preflight: HIGH risk (new findings) in 1 staged component");
     expect(blocked.stderr).toContain("Commit blocked");
     expect(git("diff", "--cached", "--name-only")).toContain("Contract_Signed_Date__c");
 

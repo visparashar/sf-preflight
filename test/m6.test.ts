@@ -63,7 +63,7 @@ describe("config file", () => {
 
   it("keeps the published JSON schema in line with the parser", () => {
     const schema = JSON.parse(readFileSync(path.resolve(__dirname, "../schema/preflight.schema.json"), "utf8"));
-    expect(Object.keys(schema.properties).sort()).toEqual(["$schema", "gate", "ignore", "rules"]);
+    expect(Object.keys(schema.properties).sort()).toEqual(["$schema", "baseline", "gate", "ignore", "rules"]);
     const gateKeys = Object.keys(schema.properties.gate.properties);
     expect(gateKeys.sort()).toEqual([
       "aiAssistedApprovals",

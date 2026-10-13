@@ -107,12 +107,16 @@ export function hookSummary(result: AnalysisResult, failOn: Severity | "none", m
   const block = blocking(result, failOn);
   const n = result.changes.length;
   const lines = [
-    `sf-preflight: ${result.summary.risk.toUpperCase()} risk in ${n} staged component${n === 1 ? "" : "s"}`,
+    `sf-preflight: ${result.summary.risk.toUpperCase()} risk${result.baseline ? " (new findings)" : ""} in ${n} staged component${n === 1 ? "" : "s"}`,
   ];
   for (const f of shown.slice(0, max))
     lines.push(`  ${MARK[f.severity]}  ${f.title}${f.files[0] ? `  (${f.files[0]})` : ""}`);
   if (shown.length > max) lines.push(`  ... and ${shown.length - max} more`);
   for (const w of result.warnings) lines.push(`  note: ${w}`);
+  if (result.baseline?.hidden)
+    lines.push(
+      `  ${result.baseline.hidden} finding(s) already there before this change are not shown (--all shows them).`,
+    );
   if (block.length) {
     lines.push(
       "",

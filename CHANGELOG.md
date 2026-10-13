@@ -14,6 +14,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   slowed down; `--no-verify` or `PREFLIGHT_SKIP=1` skips it. Works with Husky, lefthook and pre-commit. See
   [docs/HOOKS.md](docs/HOOKS.md).
 - `preflight analyze --staged` (and the other analysis commands): analyze what is staged, against `HEAD`.
+- Baseline mode: report only the findings a change introduces. `"baseline": "base"` in `.preflight.json` (or
+  `--baseline base`) analyzes the changed components at the base ref too and hides what was already there;
+  `preflight baseline` writes a reviewed list of accepted findings to commit and point the policy at. Only
+  findings about the org's state (cycles, DML in loops, untested agent actions, ...) can be hidden; findings
+  about the change itself are always shown. The pre-commit hook uses `"base"` by default (`--all` shows
+  everything). See [docs/CONFIG.md](docs/CONFIG.md#baseline-only-new-findings).
 
 ### Changed
 

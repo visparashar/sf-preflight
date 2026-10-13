@@ -2,6 +2,7 @@
 
 import path from "node:path";
 import { analyze } from "./analyze.js";
+import { applyBaseline, findingsAtRef, readBaselineFile } from "./baseline.js";
 import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, gitStagedFiles, hasHead, toChanges } from "./changes.js";
 import { applyConfig, loadPolicy, type PreflightConfig } from "./config.js";
 import { destructiveChanges } from "./destructive.js";
@@ -21,6 +22,13 @@ export {
   explainAgent,
 } from "./agentImpact.js";
 export { analyze, fieldReferences } from "./analyze.js";
+export {
+  applyBaseline,
+  BASELINE_FILE,
+  fingerprint,
+  wholeProjectChanges,
+  writeBaselineFile,
+} from "./baseline.js";
 export { assertSafeRef, filesFromArgs, gitChangedFiles, gitRoot, toChanges } from "./changes.js";
 export {
   applyConfig,
@@ -130,6 +138,13 @@ export interface RunOptions {
   files?: string[];
   /** The files staged for the next commit, compared with HEAD (for a pre-commit hook). */
   staged?: boolean;
+  /**
+   * Report only new findings: "base" (compare with the base ref), a baseline file path (relative
+   * to the working directory), or false to ignore the policy's baseline setting.
+   */
+  baseline?: string | false;
+  /** The baseline to use when neither the option nor the policy sets one (the hook uses "base"). */
+  defaultBaseline?: string;
   maxDepth?: number;
   /** Org alias or username already authorized with `sf org login`: adds read-only org context. */
   org?: string;
@@ -220,16 +235,48 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
     ];
   if (root) result.projectPathInRepo = toPosix(path.relative(root, projectDir));
   if (opts.org) enrichWithOrg(model, result, { org: opts.org, runner: opts.sfRunner });
+  let final = result;
+  let policyConfig: PreflightConfig = {};
   if (opts.config !== false) {
     const policy = loadPolicy(projectDir, { explicit: opts.config, ref: opts.configRef });
     if (policy.warning) result.warnings = [...result.warnings, policy.warning];
     if (policy.file) {
-      const configured = applyConfig(result, policy.config);
-      configured.config = { file: policy.file, ref: policy.ref, sha256: policy.sha256 };
-      return { model, result: configured, policy: policy.config };
+      final = applyConfig(result, policy.config);
+      final.config = { file: policy.file, ref: policy.ref, sha256: policy.sha256 };
+      policyConfig = policy.config;
     }
   }
-  return { model, result, policy: {} };
+  // Baseline: from the option, else the policy (a policy path is relative to the project).
+  const baseline =
+    opts.baseline === false
+      ? undefined
+      : (opts.baseline ??
+        (policyConfig.baseline === undefined
+          ? opts.defaultBaseline
+          : policyConfig.baseline !== "base"
+            ? path.join(projectDir, policyConfig.baseline)
+            : policyConfig.baseline));
+  if (baseline === "base") {
+    if (opts.base) {
+      final = applyBaseline(
+        final,
+        findingsAtRef(projectDir, opts.base, changes, policyConfig, opts.maxDepth),
+        `base ref ${opts.base}`,
+      );
+    } else if (!opts.staged) {
+      final.warnings = [
+        ...final.warnings,
+        'Baseline "base" needs a git base ref (--base or --staged); showing all findings.',
+      ];
+    }
+  } else if (baseline) {
+    final = applyBaseline(
+      final,
+      readBaselineFile(path.resolve(baseline)),
+      toPosix(path.relative(projectDir, path.resolve(baseline))),
+    );
+  }
+  return { model, result: final, policy: policyConfig };
 }
 
 /** Analyze a change and generate Apex tests for it. Nothing is written to disk. */

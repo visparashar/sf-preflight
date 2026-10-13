@@ -40,6 +40,11 @@ export interface PreflightConfig {
     paths?: string[];
   };
   gate?: GateConfig;
+  /**
+   * Report only findings the change introduces: "base" compares with the base ref, or a path
+   * (relative to the project) to a baseline file written by `preflight baseline`.
+   */
+  baseline?: string;
 }
 
 export const CONFIG_FILE = ".preflight.json";
@@ -62,8 +67,15 @@ export function parseConfig(json: unknown, file = CONFIG_FILE): PreflightConfig 
       if (!keys.includes(k)) fail(file, `unknown setting "${where}${k}" (expected one of: ${keys.join(", ")})`);
     }
   };
-  known(json, ["rules", "ignore", "gate"], "");
+  known(json, ["rules", "ignore", "gate", "baseline"], "");
   const config: PreflightConfig = {};
+
+  if (json.baseline !== undefined) {
+    const b = json.baseline;
+    if (typeof b !== "string" || !b || path.isAbsolute(b) || b.split(/[\\/]/).includes(".."))
+      fail(file, `"baseline" must be "base" or a path inside the project`);
+    config.baseline = b;
+  }
 
   if (json.rules !== undefined) {
     if (!isObject(json.rules)) fail(file, `"rules" must be an object of rule id → severity`);
