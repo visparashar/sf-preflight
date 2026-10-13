@@ -77,13 +77,13 @@ jobs:
       - run: npm run build
         working-directory: vscode
       - name: Activate the extension against a sample project
-        run: node --test test/workerPool.test.mjs test/extension.test.mjs
+        run: node --test test/workerPool.test.mjs test/updateCheck.test.mjs test/extension.test.mjs
         working-directory: vscode
       - name: Package the extension
         run: npx vsce package --no-dependencies -o sf-preflight.vsix
         working-directory: vscode
       - name: Test the minified build that ships
-        run: node --test test/workerPool.test.mjs test/extension.test.mjs
+        run: node --test test/workerPool.test.mjs test/updateCheck.test.mjs test/extension.test.mjs
         working-directory: vscode
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

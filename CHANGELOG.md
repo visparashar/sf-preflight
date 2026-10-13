@@ -9,6 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Update notice**: when a newer release is on npm, a short banner after a command says so, with the update
+  command for how sf-preflight was started (`npx`, project or global install). Checked at most once a day by
+  a detached process, so commands never wait; shown at most once a day, only in an interactive terminal (not in
+  CI, hooks, the agent hook or the MCP server). Only the latest version number is requested. Off with
+  `PREFLIGHT_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER=1`.
+
 - **OmniStudio** (standard runtime: OmniScripts, Integration Procedures, Data Mappers, FlexCards). Their
   references sit in JSON settings that deployments don't check, so a broken one fails only when a user runs it.
   sf-preflight now reads them:

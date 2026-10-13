@@ -18,7 +18,8 @@ is still slow and manual. `sf-preflight` reads your SFDX project and a git diff,
 change through the org's order of execution — flows, triggers, validation rules, roll-ups,
 permissions — and reports the blast radius, the risks and the tests that matter.
 
-It is open source, runs offline on your source code, and needs no org credentials.
+It is open source, runs offline on your source code, and needs no org credentials. (The one request it
+makes on its own is a daily check for a newer version; see [Update notices](#update-notices).)
 
 > **Status:** early (0.x). The CLI, MCP server, GitHub Action, test generation, Agentforce
 > action verification, the quality gate and evidence packs work today; org context is in beta.
@@ -312,6 +313,20 @@ const result = run({ projectDir: ".", base: "origin/main" });
 console.log(result.summary.risk, result.findings.length);
 console.log(toMarkdown(result));
 ```
+
+## Update notices
+
+When a newer release is out, the command line shows a short banner after a command finishes, and the
+VS Code extension shows a notification with **Update**, **What's new** and **Skip this version**.
+
+- **What is sent:** at most once a day, a plain request for the latest version number: `registry.npmjs.org`
+  for the command line, `open-vsx.org` for the extension. Nothing about you, your project or the run is sent.
+  Only a plain `x.y.z` answer is used.
+- **When the CLI shows it:** at most once a day, on stderr, and only in an interactive terminal. Never in CI,
+  in git hooks, in the agent hook or MCP server, or when output is redirected. The request runs in a detached
+  process, so commands never wait on the network.
+- **Turning it off:** `PREFLIGHT_NO_UPDATE_CHECK=1` (or the common `NO_UPDATE_NOTIFIER=1`) for the command
+  line; the `sfPreflight.checkForUpdates` setting for the extension.
 
 ## Performance
 

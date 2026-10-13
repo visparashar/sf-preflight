@@ -8,10 +8,12 @@ import type { FailOn } from "../../src/core/config.js";
 import type { Insight } from "../../src/core/insight.js";
 import { installSkill } from "../../src/core/skill.js";
 import type { AnalysisResult, SaveEvent, SaveProcedure, Severity } from "../../src/core/types.js";
+import { fetchLatestVersion, OPEN_VSX_URL, RELEASES_URL } from "../../src/core/updateCheck.js";
 import { addToHistory, type HistoryEntry, historyEntryOf, readHistory } from "./dashboard.js";
 import { DashboardPanel, type DashboardSource } from "./dashboard-panel.js";
 import { GraphPanel, type GraphSource } from "./graph-panel.js";
 import { isMetadataFile, locate, problemsOf, RULES_URL, type Span, statusOf, type TreeNode, treeOf } from "./model.js";
+import { checkForExtensionUpdate } from "./updateCheck.js";
 import type { WorkerRequest } from "./worker.js";
 import { WorkerPool } from "./workerPool.js";
 
@@ -137,6 +139,29 @@ function limiter(max: number) {
 
 let pool: WorkerPool | undefined;
 
+const EXTENSION_ID = "visparashar.sf-preflight-vscode";
+
+/** A little after start-up, tell the user about a newer release (see updateCheck.ts). */
+function scheduleUpdateCheck(context: vscode.ExtensionContext, current: string): void {
+  // Not in tests or while developing the extension, and only with somewhere to remember the answer.
+  if (!context.globalState || context.extensionMode !== vscode.ExtensionMode.Production) return;
+  if (process.env.PREFLIGHT_NO_UPDATE_CHECK) return;
+  if (vscode.workspace.getConfiguration("sfPreflight").get<boolean>("checkForUpdates") === false) return;
+  const timer = setTimeout(() => {
+    void checkForExtensionUpdate({
+      current,
+      now: Date.now(),
+      state: context.globalState,
+      fetchLatest: () => fetchLatestVersion(OPEN_VSX_URL),
+      show: (message, ...items) => vscode.window.showInformationMessage(message, ...items),
+      openExtension: () => void vscode.commands.executeCommand("extension.open", EXTENSION_ID),
+      openReleaseNotes: () => void vscode.env.openExternal(vscode.Uri.parse(RELEASES_URL)),
+    }).catch(() => undefined);
+  }, 15_000);
+  timer.unref?.();
+  context.subscriptions.push({ dispose: () => clearTimeout(timer) });
+}
+
 function runWorker<T>(context: vscode.ExtensionContext, req: WorkerRequest): Promise<T> {
   pool ??= new WorkerPool(path.join(context.extensionPath, "dist", "worker.js"), {
     size: MAX_PARALLEL,
@@ -246,6 +271,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const output = vscode.window.createOutputChannel("sf-preflight");
   const slot = limiter(MAX_PARALLEL);
   const extensionVersion = String((context.extension?.packageJSON as { version?: string } | undefined)?.version ?? "0");
+  scheduleUpdateCheck(context, extensionVersion);
   context.subscriptions.push(
     diagnostics,
     status,

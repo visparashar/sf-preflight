@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- **Update notification**: when a newer sf-preflight is out, a notification offers **Update** (opens the
+  extension's page), **What's new** and **Skip this version**. Checked at most once a day against Open VSX (only
+  the version number is requested). Off with `sfPreflight.checkForUpdates`.
 - **OmniStudio**: findings for OmniScripts, Integration Procedures, Data Mappers and FlexCards, an OmniStudio
   factor on the risk dashboard, and CodeLens above their files (who uses it, what it calls, what it saves).
 - **Quick fixes** (the light bulb) on sf-preflight problems: open the other files involved; generate Apex tests
