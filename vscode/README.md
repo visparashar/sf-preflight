@@ -31,6 +31,11 @@ Nothing to configure, and no org login needed.
 - **Blast radius graph**: the change at the centre and everything it sets off around it, one ring
   per hop, coloured by risk, with automation cycles drawn as recursion arrows. Hover a node for
   its findings; click it to open the file. Open it with the graph button on the Blast radius view.
+- **While you type**: unsaved edits to metadata and Apex are analyzed after a short pause, and problems are
+  underlined on the element they are about (the field, rule or class the finding names), not the top of the file.
+- **Before you change anything**: a line above each field, object, trigger, class and flow file says who uses it
+  and what runs when its object is saved, e.g. *Used by 1 validation rule, 2 flows · saving Opportunity runs 3
+  automations*. Click it for the list.
 - **Problems panel**: each finding on the file it's about (at the line, when known), with a link
   to the rule's explanation. High findings are errors, medium are warnings.
 - **Blast radius view** (activity bar): the change's risk, its findings, the changed components,
@@ -79,6 +84,8 @@ editor's built-in Node.js; nothing else needs installing.
 |---|---|---|
 | `sfPreflight.baseRef` | default branch | Branch or commit to compare with; `HEAD` for uncommitted changes only. Per workspace folder |
 | `sfPreflight.analyzeOnSave` | `true` | Analyze again when Salesforce metadata changes: saves, and also git checkouts, pulls and retrieves |
+| `sfPreflight.analyzeOnType` | `true` | Analyze unsaved edits after a short pause in typing, so findings appear while you write |
+| `sfPreflight.codeLens` | `true` | Show above each metadata file who uses it and what runs when its object is saved |
 | `sfPreflight.minSeverity` | `low` | Lowest severity shown in the Problems panel |
 | `sfPreflight.depth` | `4` | Levels of automation cascade to follow |
 | `sfPreflight.mcp.enabled` | `true` | Offer the MCP server to agent mode |

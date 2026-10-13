@@ -212,7 +212,7 @@ function loadPages(model: OrgModel, read: (rel: string) => string): void {
 export function loadProject(
   projectDirInput: string,
   /** `cacheKey`: use another directory's parse cache (a copy of the same project, e.g. at the base ref). */
-  opts: { cache?: boolean; cacheKey?: string } = {},
+  opts: { cache?: boolean; cacheKey?: string; overlay?: Map<string, string> } = {},
 ): OrgModel {
   const projectDir = path.resolve(projectDirInput);
   if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
@@ -221,6 +221,7 @@ export function loadProject(
   const roots = sourceRoots(projectDir);
   const model: OrgModel = {
     projectDir,
+    overlay: opts.overlay?.size ? opts.overlay : undefined,
     sourceRoots: roots,
     objects: new Map(),
     validationRules: [],
@@ -252,7 +253,7 @@ export function loadProject(
   const projectObjects = new Set(model.objects.keys());
   const cache = new ParseCache(opts.cacheKey ?? projectDir, projectObjects, opts.cache);
 
-  const read = (rel: string) => readFileSync(path.join(projectDir, rel), "utf8");
+  const read = (rel: string) => opts.overlay?.get(rel) ?? readFileSync(path.join(projectDir, rel), "utf8");
   cache.prefill(
     refs.flatMap((ref): { file: string; kind: "class" | "trigger"; name: string; source: () => string }[] =>
       ref.type === "ApexClass" && ref.file.endsWith(".cls")

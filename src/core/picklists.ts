@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { readProjectFile } from "./files.js";
 import { parseField } from "./parsers/fields.js";
 import { parseRecordType } from "./parsers/recordTypes.js";
 import type { ComponentRef, Finding, OrgModel } from "./types.js";
@@ -19,7 +20,7 @@ const literal = (value: string) =>
 
 function read(model: OrgModel, file: string): string | undefined {
   try {
-    const text = readFileSync(path.join(model.projectDir, file), "utf8");
+    const text = readProjectFile(model, file);
     return text.length > MAX_FILE_BYTES ? undefined : text;
   } catch {
     return undefined;

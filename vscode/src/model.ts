@@ -20,6 +20,53 @@ export interface Problem {
   rule: string;
   /** Other files involved, for related information. */
   related: string[];
+  /** The finding's title, to find the spot it is about (see `locate`). */
+  title: string;
+  /** The line came from the finding itself (an Apex statement), not a default. */
+  exact: boolean;
+}
+
+export interface Span {
+  line: number;
+  start: number;
+  end: number;
+}
+
+/** Names worth looking for in a file: API names and dotted paths from the finding's title, longest first. */
+export function namesIn(title: string): string[] {
+  const out = new Set<string>();
+  for (const m of title.matchAll(/[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*/g)) {
+    const t = m[0];
+    for (const part of [t, ...t.split(".")]) {
+      // Something that looks like an API name, not an English word.
+      if (part.length >= 4 && (/_/.test(part) || /[a-z][A-Z]/.test(part) || /^[A-Z][a-z]+[A-Z]/.test(part)))
+        out.add(part);
+    }
+  }
+  return [...out].sort((a, b) => b.length - a.length);
+}
+
+/**
+ * Where in a file a problem should be underlined: its own line when the finding gives one; else
+ * the first place the file names something from the finding's title; else the file's first element.
+ */
+export function locate(text: string, p: Pick<Problem, "line" | "title" | "exact">): Span {
+  const lines = text.split(/\r?\n/);
+  const span = (line: number): Span => {
+    const s = lines[line] ?? "";
+    const start = s.length - s.trimStart().length;
+    return { line, start, end: Math.max(start + 1, s.trimEnd().length) };
+  };
+  if (p.exact && p.line < lines.length) return span(p.line);
+  for (const name of namesIn(p.title)) {
+    const re = new RegExp(`(?<![A-Za-z0-9_])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_])`);
+    for (const [i, l] of lines.entries()) {
+      const m = re.exec(l);
+      if (m) return { line: i, start: m.index, end: m.index + name.length };
+    }
+  }
+  const first = lines.findIndex((l) => l.trim() && !/^\s*<\?xml/.test(l));
+  return span(first < 0 ? 0 : first);
 }
 
 /**
@@ -40,6 +87,8 @@ export function problemsOf(result: AnalysisResult, minSeverity: Severity = "low"
         message: messageOf(f),
         rule: f.rule,
         related: files.filter((x) => x !== file).map(abs),
+        title: f.title,
+        exact: i === 0 && !!f.line,
       });
     }
   }

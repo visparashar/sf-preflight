@@ -62,6 +62,7 @@ export {
   parseApprovals,
 } from "./gate.js";
 export * from "./incidents/index.js";
+export { type Insight, insightFor } from "./insight.js";
 export {
   type AuditEntry,
   alertFromMonitor,
@@ -136,6 +137,11 @@ export interface RunOptions {
   head?: string;
   /** Explicit changed files (absolute, cwd-relative or project-relative). */
   files?: string[];
+  /**
+   * Unsaved editor text by file path (absolute or project-relative): analyzed instead of the file on
+   * disk, and counted as changed.
+   */
+  overlay?: Record<string, string>;
   /** The files staged for the next commit, compared with HEAD (for a pre-commit hook). */
   staged?: boolean;
   /**
@@ -167,7 +173,12 @@ export function run(opts: RunOptions): AnalysisResult {
 /** Like `run`, but also returns the parsed project (needed by test generation) and the policy used. */
 export function analyzeChange(opts: RunOptions): { model: OrgModel; result: AnalysisResult; policy: PreflightConfig } {
   const projectDir = path.resolve(opts.projectDir);
-  const model = loadProject(projectDir);
+  const overlay = new Map<string, string>();
+  for (const [file, text] of Object.entries(opts.overlay ?? {})) {
+    const rel = toPosix(path.relative(projectDir, path.resolve(projectDir, file)));
+    if (!rel.startsWith("..") && !path.isAbsolute(rel)) overlay.set(rel, text);
+  }
+  const model = loadProject(projectDir, { overlay });
   let changedFiles: { file: string; changeType: ChangeType; previousFile?: string }[];
   let partlyStaged: string[] = [];
   if (opts.staged) {
@@ -199,6 +210,9 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
       });
     }
   }
+  // Files edited in the editor but not saved are part of the change too.
+  for (const rel of overlay.keys())
+    if (!changedFiles.some((f) => f.file === rel)) changedFiles.push({ file: rel, changeType: "modified" });
   // Components deleted through a destructive manifest, which can sit outside the package directories.
   const destructive = destructiveChanges(projectDir, [...changedFiles, ...outsideFiles]);
   const parsed = toChanges(changedFiles);

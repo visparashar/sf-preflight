@@ -275,6 +275,35 @@ test("analyzes again when metadata changes outside the editor", async () => {
   await until(() => runs() > afterChange, "a run after a checkout", 20_000);
 });
 
+test("analyzes unsaved edits after a pause in typing, underlining what they affect", async () => {
+  const file = path.join(repo, SRC, "objects", "Opportunity", "fields", "Contract_Signed_Date__c.field-meta.xml");
+  const text = readFileSync(file, "utf8").replace("<type>Date</type>", "<type>DateTime</type>");
+  const doc = { uri: vscode.Uri.file(file), isDirty: true, getText: () => text, version: 2 };
+  vscode.__state.textDocuments = [doc];
+  const before = runs();
+  vscode.__state.onTextChange({ document: doc, contentChanges: [{ text: "x" }] });
+  await until(() => runs() > before, "a run after typing", 20_000);
+  // The unsaved field change is part of the change: its findings are on the field.
+  await until(
+    () => (vscode.__state.diagnostics.get(file) ?? []).some((d) => d.code.value === "field-used-by-validation-rule"),
+    "a finding on the unsaved field",
+    20_000,
+  );
+  assert.equal(readFileSync(file, "utf8").includes("DateTime"), false, "the file on disk is untouched");
+  // Underlined on the field's name, not on the first line.
+  const used = vscode.__state.diagnostics.get(file).find((d) => d.code.value === "field-used-by-validation-rule");
+  assert.deepEqual([used.range.start.line, used.range.start.character, used.range.end.character], [2, 14, 37]);
+  vscode.__state.textDocuments = [];
+});
+
+test("shows who uses a file and what runs, above it", async () => {
+  const file = path.join(repo, SRC, "objects", "Opportunity", "fields", "Contract_Signed_Date__c.field-meta.xml");
+  const lenses = await vscode.__state.codeLens.provideCodeLenses({ uri: vscode.Uri.file(file) });
+  assert.equal(lenses.length, 1);
+  assert.match(lenses[0].command.title, /^sf-preflight: Used by 1 validation rule/);
+  assert.equal(lenses[0].command.command, "sfPreflight.showInsight");
+});
+
 test("generates tests that don't count as part of the change", async () => {
   vscode.__state.answer = (_msg, _opts, ...items) => items.find((i) => i === "Generate");
   await vscode.__state.commands.get("sfPreflight.generateTests")();
