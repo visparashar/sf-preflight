@@ -7,6 +7,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Releases carry the npm tarball or `.vsix` with a signed build provenance bundle (`*.sigstore.json`), verifiable
+  with `gh attestation verify` (see SECURITY.md).
+- Property-based tests (fast-check) fuzz the code that reads untrusted input. They found that a component name
+  ending in any `__x` suffix was matched anywhere as if it were a custom object or field; only Salesforce's own
+  suffixes (`__c`, `__e`, `__mdt`, ...) are now.
+
+### Security
+
+- The VS Code extension's publishing tool (ovsx) no longer pulls a vulnerable `braces` through an old `vsce`
+  (GHSA-vfj7-8cjw-p6xm); it uses the same, patched `vsce` as the build.
+
 ## [0.10.1] - 2026-10-09
 
 ### Added

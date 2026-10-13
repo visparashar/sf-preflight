@@ -65,6 +65,9 @@ jobs:
     environment: vscode-marketplace
     permissions:
       contents: write # create the GitHub release with the .vsix
+      id-token: write # sign the .vsix
+      attestations: write # build provenance for the .vsix
+      artifact-metadata: write
     env:
       # Whether each token is set, readable in step conditions (a step's own env isn't).
       HAS_VSCE_PAT: ${{ secrets.VSCE_PAT != '' }}
@@ -104,15 +107,23 @@ jobs:
         run: |
           [ "$HAS_VSCE_PAT" = "true" ] || echo "::warning::VSCE_PAT isn't set: not published to the VS Code Marketplace."
           [ "$HAS_OVSX_PAT" = "true" ] || echo "::warning::OVSX_PAT isn't set: not published to Open VSX."
-      - name: Create the GitHub release with the .vsix
+      - name: Sign the .vsix (build provenance)
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: vscode/sf-preflight.vsix
+      - name: Create the GitHub release with the .vsix and its signature
         run: |
+          cp "$BUNDLE" vscode/sf-preflight.vsix.sigstore.json
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" vscode/sf-preflight.vsix --clobber
+            gh release upload "$GITHUB_REF_NAME" vscode/sf-preflight.vsix vscode/sf-preflight.vsix.sigstore.json --clobber
           else
             # Not "latest": that stays the CLI and GitHub Action release.
-            gh release create "$GITHUB_REF_NAME" vscode/sf-preflight.vsix --verify-tag --latest=false \
+            gh release create "$GITHUB_REF_NAME" vscode/sf-preflight.vsix vscode/sf-preflight.vsix.sigstore.json \
+              --verify-tag --latest=false \
               --title "VS Code extension ${GITHUB_REF_NAME#extension-v}" --notes-file vscode/CHANGELOG.md
           fi
         env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
