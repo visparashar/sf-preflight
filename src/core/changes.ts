@@ -85,6 +85,44 @@ export function gitChangedFiles(
   return results.filter((r) => !r.file.startsWith(".."));
 }
 
+/**
+ * Files staged for the next commit (`git diff --cached`), as project-relative paths, and which of
+ * them also have unstaged edits (the analysis reads the working tree, so those are checked as edited).
+ */
+export function gitStagedFiles(projectDir: string): {
+  files: { file: string; changeType: ChangeType; previousFile?: string }[];
+  partlyStaged: string[];
+} {
+  const dir = path.resolve(projectDir);
+  const repoRoot = gitRoot(dir);
+  if (!repoRoot) throw new Error(`Not a git repository: ${dir}`);
+  const toProjectRel = (repoRel: string) => toPosix(path.relative(dir, path.join(repoRoot, repoRel)));
+  const files: { file: string; changeType: ChangeType; previousFile?: string }[] = [];
+  for (const line of git(repoRoot, ["diff", "--cached", "--name-status", "-M", "--", dir]).split("\n")) {
+    if (!line.trim()) continue;
+    const cols = line.split("\t");
+    const changeType = STATUS[cols[0]![0]!] ?? "modified";
+    if (changeType === "renamed" && cols.length >= 3)
+      files.push({ file: toProjectRel(cols[2]!), changeType, previousFile: toProjectRel(cols[1]!) });
+    else if (cols[1]) files.push({ file: toProjectRel(cols[1]), changeType });
+  }
+  const unstaged = new Set(
+    git(repoRoot, ["diff", "--name-only", "--", dir]).split("\n").filter(Boolean).map(toProjectRel),
+  );
+  const inside = files.filter((f) => !f.file.startsWith(".."));
+  return { files: inside, partlyStaged: inside.filter((f) => unstaged.has(f.file)).map((f) => f.file) };
+}
+
+/** Whether the repository has a commit yet (a first commit has nothing to compare with). */
+export function hasHead(projectDir: string): boolean {
+  try {
+    git(path.resolve(projectDir), ["rev-parse", "--verify", "--quiet", "HEAD"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Read a file's content at a git ref (used to diff permission sets against the base). */
 export function gitShow(projectDir: string, ref: string, projectRelFile: string): string | undefined {
   try {

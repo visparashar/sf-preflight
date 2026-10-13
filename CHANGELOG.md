@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `preflight hook install`: a git pre-commit hook that checks the staged Salesforce metadata on every commit and
+  blocks it when a finding reaches the threshold (the policy's, else high). Commits without metadata are not
+  slowed down; `--no-verify` or `PREFLIGHT_SKIP=1` skips it. Works with Husky, lefthook and pre-commit. See
+  [docs/HOOKS.md](docs/HOOKS.md).
+- `preflight analyze --staged` (and the other analysis commands): analyze what is staged, against `HEAD`.
+
 ### Changed
 
 - Releases carry the npm tarball or `.vsix` with a signed build provenance bundle (`*.sigstore.json`), verifiable

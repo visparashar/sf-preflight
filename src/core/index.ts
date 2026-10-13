@@ -2,7 +2,7 @@
 
 import path from "node:path";
 import { analyze } from "./analyze.js";
-import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, toChanges } from "./changes.js";
+import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, gitStagedFiles, hasHead, toChanges } from "./changes.js";
 import { applyConfig, loadPolicy, type PreflightConfig } from "./config.js";
 import { destructiveChanges } from "./destructive.js";
 import { enrichWithOrg } from "./org/enrich.js";
@@ -128,6 +128,8 @@ export interface RunOptions {
   head?: string;
   /** Explicit changed files (absolute, cwd-relative or project-relative). */
   files?: string[];
+  /** The files staged for the next commit, compared with HEAD (for a pre-commit hook). */
+  staged?: boolean;
   maxDepth?: number;
   /** Org alias or username already authorized with `sf org login`: adds read-only org context. */
   org?: string;
@@ -152,7 +154,13 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
   const projectDir = path.resolve(opts.projectDir);
   const model = loadProject(projectDir);
   let changedFiles: { file: string; changeType: ChangeType; previousFile?: string }[];
-  if (opts.files?.length) {
+  let partlyStaged: string[] = [];
+  if (opts.staged) {
+    const staged = gitStagedFiles(projectDir);
+    changedFiles = staged.files;
+    partlyStaged = staged.partlyStaged;
+    if (hasHead(projectDir)) opts = { ...opts, base: "HEAD" };
+  } else if (opts.files?.length) {
     changedFiles = filesFromArgs(projectDir, opts.files);
   } else if (opts.base) {
     changedFiles = gitChangedFiles({ projectDir, base: opts.base, head: opts.head });
@@ -195,7 +203,8 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
     head: opts.head,
     maxDepth: opts.maxDepth,
     readBase: opts.base ? (file) => gitShow(projectDir, opts.base!, file) : undefined,
-    provenance: opts.base && !opts.files?.length ? gitProvenance(projectDir, opts.base, opts.head) : undefined,
+    provenance:
+      opts.base && !opts.files?.length && !opts.staged ? gitProvenance(projectDir, opts.base, opts.head) : undefined,
   });
   if (destructive.changes.length) {
     // Point at the manifest that deletes each component, not the source path it would have.
@@ -204,6 +213,11 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
     for (const c of result.changes) c.component = { ...c.component, file: real(c.component.file) };
   }
   if (destructive.warnings.length) result.warnings = [...result.warnings, ...destructive.warnings];
+  if (partlyStaged.length)
+    result.warnings = [
+      ...result.warnings,
+      `${partlyStaged.length} staged file(s) also have unstaged edits; checked as they are in the working tree: ${partlyStaged.slice(0, 5).join(", ")}${partlyStaged.length > 5 ? " ..." : ""}`,
+    ];
   if (root) result.projectPathInRepo = toPosix(path.relative(root, projectDir));
   if (opts.org) enrichWithOrg(model, result, { org: opts.org, runner: opts.sfRunner });
   if (opts.config !== false) {

@@ -121,6 +121,8 @@ preflight rollback 9c607ea --component ValidationRule:Opportunity.Require_Close_
 | `--org <alias>` | — | Beta: add read-only context from an org authorized with `sf org login` ([details](docs/ORG_CONTEXT.md)) |
 | `--fail-on <level>` | `none` | Exit with code 2 when risk ≥ `low`, `medium` or `high` |
 
+Catch risky changes before they are committed: `npx sf-preflight hook install` adds a git pre-commit hook that checks the staged metadata ([details](docs/HOOKS.md)).
+
 Watch production for risky changes made directly in the org (read-only, on a schedule): `preflight monitor --org prod --since 1h --notify-on high` ([details](docs/MONITOR.md)).
 
 Send a Slack, Teams or generic webhook alert from a saved JSON report: `PREFLIGHT_WEBHOOK_URL=<https url> preflight notify --result report.json --on high` (also `--link`, `--source`, `--target`, `--dry-run`, `--strict`; [details](docs/GITHUB_ACTION.md#risk-alerts)).
