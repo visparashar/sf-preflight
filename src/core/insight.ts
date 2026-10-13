@@ -8,6 +8,7 @@ import {
   lightningEmbedding,
   writersOf,
 } from "./graph.js";
+import { omniCallersOf, omniKindOf, omniLabel, omniOf, refLabel } from "./omnistudio.js";
 import { saveProcedure } from "./orderOfExecution.js";
 import { classifyPath } from "./project.js";
 import type { OrgModel } from "./types.js";
@@ -42,6 +43,13 @@ const KIND_LABEL: Record<string, [string, string]> = {
   Report: ["report", "reports"],
   ListView: ["list view", "list views"],
   EmailTemplate: ["email template", "email templates"],
+  OmniScript: ["OmniScript", "OmniScripts"],
+  IntegrationProcedure: ["Integration Procedure", "Integration Procedures"],
+  DataMapper: ["Data Mapper", "Data Mappers"],
+  FlexCard: ["FlexCard", "FlexCards"],
+  ApexClassTarget: ["Apex class", "Apex classes"],
+  LightningComponentTarget: ["Lightning component", "Lightning components"],
+  NamedCredential: ["named credential", "named credentials"],
 };
 
 function countBy(kinds: string[]): string {
@@ -74,7 +82,7 @@ export function insightFor(model: OrgModel, rel: string): Insight {
       const refs = fieldReferences(model, object, field);
       if (refs.length) {
         parts.push(`Used by ${countBy(refs.map((r) => r.from.kind))}`);
-        details.push(...refs.slice(0, 20).map((r) => `${r.from.kind} ${r.from.name}`));
+        details.push(...refs.slice(0, 20).map((r) => refLabel(r.from)));
         if (refs.length > 20) details.push(`… and ${refs.length - 20} more`);
       }
       const save = saveSummary(model, object);
@@ -132,6 +140,34 @@ export function insightFor(model: OrgModel, rel: string): Insight {
       break;
     }
     case "Metadata": {
+      const omniKind = omniKindOf(comp);
+      if (omniKind) {
+        const self = omniOf(model).find((o) => o.file === comp.file);
+        if (!self) break;
+        const callers = omniCallersOf(model, omniKind, self.name).filter((c) => c.file !== self.file);
+        if (callers.length) {
+          parts.push(`Used by ${countBy(callers.map((c) => c.kind))}`);
+          details.push(...callers.map((c) => `${omniLabel(c.kind)} ${c.name}`));
+        }
+        const calls = [...new Map(self.calls.map((c) => [`${c.kind}|${c.target.toLowerCase()}`, c])).values()];
+        if (calls.length) {
+          // Apex classes and components are named apart from OmniStudio's own kinds.
+          const kinds = calls.map((c) =>
+            c.kind === "ApexClass"
+              ? "ApexClassTarget"
+              : c.kind === "LightningComponent"
+                ? "LightningComponentTarget"
+                : c.kind,
+          );
+          parts.push(`calls ${countBy(kinds)}`);
+          details.push(...calls.map((c) => `calls ${omniLabel(c.kind)} ${c.target}${c.method ? `.${c.method}` : ""}`));
+        }
+        const objects = [...new Set([...self.reads, ...self.writes].map((u) => u.object))];
+        if (self.writes.length) parts.push(`saves ${[...new Set(self.writes.map((w) => w.object))].join(", ")}`);
+        else if (objects.length) parts.push(`reads ${objects.slice(0, 4).join(", ")}${objects.length > 4 ? "…" : ""}`);
+        if (!self.active) parts.push("inactive");
+        break;
+      }
       if (comp.metadataType === "LightningComponentBundle" || comp.metadataType === "AuraDefinitionBundle") {
         const parents = lightningEmbedding(model, comp.name);
         const pages = flexipagesPlacing(model, comp.name);

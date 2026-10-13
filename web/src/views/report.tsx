@@ -40,6 +40,10 @@ const AUTOMATION_LABEL: Record<AutomationKind, string> = {
   AutoResponseRule: "Auto-response rule",
   DuplicateRule: "Duplicate rule",
   EscalationRule: "Escalation rule",
+  OmniScript: "OmniScript",
+  IntegrationProcedure: "Integration Procedure",
+  DataMapper: "Data Mapper",
+  FlexCard: "FlexCard",
   Change: "The change",
 };
 

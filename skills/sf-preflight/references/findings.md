@@ -44,6 +44,11 @@ don't disable a rule or edit `.preflight.json` to make a finding go away unless 
 | `validation-rule-removed`, `validation-rule-inactive`, `flow-inactive`, `agent-metadata-changed`, `legacy-workflow` | Info | Context worth mentioning in your summary. | Usually nothing to fix. |
 | `field-used-by-lightning`, `apex-called-from-lightning` | Low | Lightning Web Components or Aura components use the changed field, or call the changed Apex class from the browser. | Re-test those components and the pages they sit on. |
 | `lightning-missing-reference` | Medium | A changed Lightning component imports a field or Apex class that is not in the project. | Add it to the project, or make sure the target org already has it. |
+| `omnistudio-used-by`, `apex-called-from-omnistudio` | Info / Low | OmniScripts, Integration Procedures or FlexCards use the changed OmniStudio component or Apex class. | Run them after deploying; check inputs and outputs still match. |
+| `omnistudio-missing-reference` | Medium | A changed OmniStudio component calls something not in the project (procedure, Data Mapper, class, script, component or field). The deployment does not check these. | Add it to the project, or make sure the target org has it. |
+| `omnistudio-remote-not-callable` | High | A Remote Action's Apex class implements neither `System.Callable` nor `VlocityOpenInterface2`. | Implement `System.Callable` and dispatch on the method name. |
+| `omnistudio-inactive-in-use` | Medium | An inactive OmniStudio component is still called and no active version is in the project. | Activate it, or update the callers. |
+| `omnistudio-cycle` | Medium | A procedure or script calls itself through others. | Make sure a condition ends the loop. |
 | `label-removed-still-used` | High | A custom label was removed but Apex, Visualforce, Lightning or flows still use it. | Restore the label or update what uses it. |
 | `cmdt-record-still-referenced` | Medium | A deleted custom metadata record is still named in code that reads its type. | Update the code or keep the record. |
 | `cmdt-record-changed` | Info | A custom metadata record changed; files that read its type are listed. | Check the readers behave with the new values. |

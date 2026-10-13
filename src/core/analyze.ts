@@ -45,6 +45,22 @@ import {
   parseIntegration,
   parseOutboundMessages,
 } from "./integrations.js";
+import {
+  type OmniComponent,
+  omniCallersOf,
+  omniCycles,
+  omniFieldReferences,
+  omniKindOf,
+  omniLabel,
+  omniNamed,
+  omniOf,
+  omniRef,
+  omniSaves,
+  parseOmni,
+  refLabel,
+  remoteCallable,
+  resolves,
+} from "./omnistudio.js";
 import { saveProcedure } from "./orderOfExecution.js";
 import { customComponent, parseFlexiPage, parseLayout } from "./parsers/pages.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
@@ -146,6 +162,11 @@ const describe = (a: AutomationRef) => {
       return `escalation rule ${a.name}`;
     case "ApprovalProcess":
       return `approval process ${a.name}`;
+    case "OmniScript":
+    case "IntegrationProcedure":
+    case "DataMapper":
+    case "FlexCard":
+      return `${omniLabel(a.kind)} ${a.name}`;
     default:
       return a.name;
   }
@@ -290,6 +311,126 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     }
   };
 
+  /** Remote Actions whose class can't be called by OmniStudio (no `Callable` or open interface). */
+  const notCallableFindings = (callers: OmniComponent[], className: string): Finding[] => {
+    if (!callers.length || remoteCallable(model, className) !== false) return [];
+    const cls = model.classes.get(key(className));
+    return [
+      {
+        rule: "omnistudio-remote-not-callable",
+        severity: "high",
+        title: `${cls?.name ?? className} is a Remote Action's class but does not implement Callable`,
+        detail: `${callers.map((c) => `${omniLabel(c.kind)} ${c.name}`).join(", ")} ${callers.length === 1 ? "calls" : "call"} it as a Remote Action. OmniStudio calls remote classes through \`System.Callable\` (or the managed package's \`VlocityOpenInterface2\`); without it the action fails when the script runs. Implement the interface and dispatch on the method name.`,
+        files: uniq([...(cls ? [cls.file] : []), ...callers.map((c) => c.file)]),
+      },
+    ];
+  };
+
+  /** A changed OmniScript, Integration Procedure, Data Mapper or FlexCard. */
+  const analyzeOmni = (change: Change) => {
+    const comp = change.component;
+    const kind = omniKindOf(comp)!;
+    const current = omniOf(model).find((o) => o.file === comp.file);
+    if (change.changeType === "deleted" || !current) {
+      // Its name is in its content: read it as it was.
+      let name = comp.name;
+      const baseXml = opts.readBase?.(comp.file);
+      if (baseXml) {
+        try {
+          name = parseOmni(kind, baseXml, comp.name, comp.file).name;
+        } catch {
+          // keep the file's name
+        }
+      }
+      if (omniNamed(model, kind, name).length) return; // another version is still there
+      const callers = omniCallersOf(model, kind, name);
+      if (callers.length) {
+        addFinding({
+          rule: "deleted-still-referenced",
+          severity: "high",
+          title: `Deleted ${omniLabel(kind)} ${name} is still used`,
+          detail: `Used by ${callers.map((c) => `${omniLabel(c.kind)} ${c.name}`).join(", ")}. The deployment succeeds, but those fail when they run.`,
+          files: uniq([comp.file, ...callers.map((c) => c.file)]),
+        });
+      }
+      return;
+    }
+    const versions = omniNamed(model, kind, current.name);
+    const callers = omniCallersOf(model, kind, current.name).filter((c) => c.file !== current.file);
+    if (callers.length) {
+      addFinding({
+        rule: "omnistudio-used-by",
+        severity: "info",
+        title: `${omniLabel(kind)} ${current.name} is used by ${callers.length} OmniStudio component(s)`,
+        detail: `${callers.map((c) => `${omniLabel(c.kind)} ${c.name}`).join(", ")}. A changed input, output or response shape reaches them; run them after deploying.`,
+        files: uniq([current.file, ...callers.map((c) => c.file)]),
+      });
+      if (!current.active && !versions.some((v) => v.active)) {
+        addFinding({
+          rule: "omnistudio-inactive-in-use",
+          severity: "medium",
+          title: `${omniLabel(kind)} ${current.name} is inactive but still used`,
+          detail: `${callers.map((c) => `${omniLabel(c.kind)} ${c.name}`).join(", ")} ${callers.length === 1 ? "calls" : "call"} it, and no active version is in the project. They fail when they run unless the target org has an active version.`,
+          files: uniq([current.file, ...callers.map((c) => c.file)]),
+        });
+      }
+    }
+    // What it calls that the project doesn't have.
+    const missing: string[] = [];
+    for (const c of current.calls) {
+      if (resolves(model, c) === false)
+        missing.push(`${omniLabel(c.kind)} ${c.target}${c.element ? ` (element ${c.element})` : ""}`);
+    }
+    for (const u of [...current.reads, ...current.writes]) {
+      if (!u.field) continue;
+      const def = model.objects.get(key(u.object));
+      if (
+        def &&
+        key(u.field).endsWith("__c") &&
+        !isNamespaced(u.field) &&
+        def.fields.size > 0 &&
+        !def.fields.has(key(u.field))
+      )
+        missing.push(`field ${u.object}.${u.field}`);
+    }
+    if (missing.length) {
+      addFinding({
+        rule: "omnistudio-missing-reference",
+        severity: "medium",
+        title: `${omniLabel(kind)} ${current.name} uses ${uniq(missing).length} thing(s) that are not in the project`,
+        detail: `${uniq(missing).join(", ")}. OmniStudio names them in its settings, so the deployment does not check them: it fails when it runs unless they exist in the target org already.`,
+        files: [current.file],
+      });
+    }
+    // Remote Actions whose class can't be called.
+    for (const cls of uniq(current.calls.filter((c) => c.kind === "ApexClass").map((c) => key(c.target))))
+      findings.push(...notCallableFindings([current], cls));
+    // Procedures and scripts that end up calling themselves.
+    if (kind === "IntegrationProcedure" || kind === "OmniScript") {
+      const cycles = omniCycles(model, current);
+      if (cycles.length) {
+        addFinding({
+          rule: "omnistudio-cycle",
+          severity: "medium",
+          title: `${omniLabel(kind)} ${current.name} calls itself through other components`,
+          detail: `${cycles.map((c) => c.join(" → ")).join("; ")}. Unless a condition stops it, it runs until it hits a limit.`,
+          files: [current.file],
+        });
+      }
+    }
+    // What it saves, so the objects' save automation is analyzed too.
+    const writes: { object: string; op: DmlOp }[] =
+      kind === "DataMapper"
+        ? current.writes.map((w) => ({ object: w.object, op: "upsert" }))
+        : omniSaves(model, current, (name) => {
+            const cls = model.classes.get(key(name));
+            return cls ? classWrites(model, cls) : [];
+          }).map((x) => x.write);
+    for (const w of uniqBy(writes, (x) => key(x.object)))
+      for (const event of w.op === "upsert" ? (["insert", "update"] as const) : [opToEvent(w.op)])
+        roots.push({ object: w.object, event, via: omniRef(current) });
+  };
+
   // ------------------------------------------------------------------------------------
   // 1. Seed roots, references and change-specific findings
   // ------------------------------------------------------------------------------------
@@ -315,7 +456,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
             rule: "deleted-still-referenced",
             severity: "high",
             title: `Deleted field ${comp.name} is still referenced`,
-            detail: `Referenced by ${nonPermRefs.map((r) => `${r.from.kind} ${r.from.name}`).join(", ")}. The deployment will fail or the references will break.`,
+            detail: `Referenced by ${nonPermRefs.map((r) => refLabel(r.from)).join(", ")}. The deployment will fail or the references will break.`,
             object,
             files: uniq([comp.file, ...nonPermRefs.map((r) => r.from.file).filter((f): f is string => !!f)]),
           });
@@ -514,6 +655,17 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
             files: uniq([comp.file, ...lightningCallers.map((l) => l.file)]),
           });
         }
+        const omniCallers = omniCallersOf(model, "ApexClass", cls.name);
+        if (omniCallers.length) {
+          addFinding({
+            rule: "apex-called-from-omnistudio",
+            severity: "low",
+            title: `${cls.name} is called by ${omniCallers.length} OmniStudio component(s)`,
+            detail: `${omniCallers.map((c) => `${omniLabel(c.kind)} ${c.name}`).join(", ")} ${omniCallers.length === 1 ? "calls" : "call"} it as a Remote Action or data source, so a changed method name, input or output keys reach their users directly.`,
+            files: uniq([comp.file, ...omniCallers.map((c) => c.file)]),
+          });
+          findings.push(...notCallableFindings(omniCallers, cls.name));
+        }
         const via: AutomationRef = { kind: "ApexClass", name: cls.name, file: cls.file };
         const entryPoints = transitiveEntryPoints(model, cls.name);
         for (const ep of entryPoints) {
@@ -629,6 +781,10 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       case "Metadata": {
         if (isLightningBundle(comp)) {
           analyzeLightning(change);
+          break;
+        }
+        if (omniKindOf(comp)) {
+          analyzeOmni(change);
           break;
         }
         if (comp.metadataType === "Layout" || comp.metadataType === "FlexiPage") {
@@ -1127,6 +1283,7 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
     if (p.fields.some((f) => key(f) === tk))
       refs.push({ from: { kind: "FlexiPage", name: p.name, file: p.file }, to: target });
   }
+  refs.push(...omniFieldReferences(model, object, field));
   return refs;
 }
 

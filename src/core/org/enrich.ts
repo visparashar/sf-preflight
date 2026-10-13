@@ -2,6 +2,7 @@
 
 import { mergeNeeds } from "../agentImpact.js";
 import { summarizeFindings } from "../analyze.js";
+import { omniLabel } from "../omnistudio.js";
 import type {
   AccessNeed,
   AgentUserAccess,
@@ -508,6 +509,11 @@ const viaLabel = (v: AutomationRef) => {
       return `class ${v.name}`;
     case "RollUpSummary":
       return `roll-up ${v.name}`;
+    case "OmniScript":
+    case "IntegrationProcedure":
+    case "DataMapper":
+    case "FlexCard":
+      return `${omniLabel(v.kind)} ${v.name}`;
     default:
       return v.name;
   }

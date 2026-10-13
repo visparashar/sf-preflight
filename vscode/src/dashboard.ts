@@ -117,6 +117,20 @@ export const RISK_FACTORS: RiskFactor[] = [
     ],
   },
   {
+    id: "omnistudio",
+    label: "OmniStudio",
+    meaning:
+      "OmniScripts, Integration Procedures, Data Mappers and FlexCards the change reaches, and what they call that is missing or can't be called.",
+    rules: [
+      "omnistudio-remote-not-callable",
+      "omnistudio-missing-reference",
+      "omnistudio-inactive-in-use",
+      "omnistudio-cycle",
+      "omnistudio-used-by",
+      "apex-called-from-omnistudio",
+    ],
+  },
+  {
     id: "load",
     label: "Code and automation load",
     meaning: "DML or SOQL in loops, crowded objects, legacy and inactive automation, and automation only in the org.",

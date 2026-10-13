@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **OmniStudio**: findings for OmniScripts, Integration Procedures, Data Mappers and FlexCards, an OmniStudio
+  factor on the risk dashboard, and CodeLens above their files (who uses it, what it calls, what it saves).
 - **Quick fixes** (the light bulb) on sf-preflight problems: open the other files involved; generate Apex tests
   for recursion, validation-rule and loop findings; accept a finding about the org's state as a known issue,
   which adds it to `.preflight-baseline.json` (and sets `"baseline"` in `.preflight.json` the first time) so it

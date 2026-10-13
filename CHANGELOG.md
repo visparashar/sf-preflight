@@ -9,6 +9,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **OmniStudio** (standard runtime: OmniScripts, Integration Procedures, Data Mappers, FlexCards). Their
+  references sit in JSON settings that deployments don't check, so a broken one fails only when a user runs it.
+  sf-preflight now reads them:
+  - Remote Actions, Data Mapper actions (and pre/post transform Data Mappers), Integration Procedure actions,
+    embedded OmniScripts, custom Lightning components and HTTP actions' named credentials, including inside
+    blocks; FlexCard data sources and child cards; the objects and fields Data Mapper Extracts read and Loads
+    write.
+  - New findings: `omnistudio-used-by`, `omnistudio-missing-reference`, `omnistudio-remote-not-callable` (a Remote
+    Action class without `System.Callable` or `VlocityOpenInterface2`, directly or through its parent class),
+    `omnistudio-inactive-in-use`, `omnistudio-cycle` and `apex-called-from-omnistudio`.
+  - A deleted Data Mapper, procedure, script or card that is still used is `deleted-still-referenced`, unless
+    another version remains; so is a deleted Apex class or field they use.
+  - Data Mapper Loads count as writers of their objects: a new validation rule lists them, and a changed
+    procedure's saves (through Data Mappers and Remote Action classes, and nested procedures) feed the save
+    procedure analysis.
+  - The older managed-package format (Vlocity DataPacks) is not read.
+
 - `acceptIntoBaseline`: add one finding to the project's baseline file (the VS Code quick fix uses it).
 
 ### Changed

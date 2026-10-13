@@ -83,6 +83,10 @@ const AUTOMATION_KIND: Record<AutomationRef["kind"], GraphNodeKind> = {
   AutoResponseRule: "Other",
   EscalationRule: "Other",
   ApprovalProcess: "Other",
+  OmniScript: "Other",
+  IntegrationProcedure: "Other",
+  DataMapper: "Other",
+  FlexCard: "Other",
   Change: "Other",
 };
 
