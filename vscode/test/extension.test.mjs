@@ -304,6 +304,38 @@ test("shows who uses a file and what runs, above it", async () => {
   assert.equal(lenses[0].command.command, "sfPreflight.showInsight");
 });
 
+test("offers quick fixes, and accepts a known issue into the baseline", async () => {
+  const file = path.join(repo, SRC, "classes", "ContactTriggerHandler.cls");
+  const diags = vscode.__state.diagnostics.get(file) ?? [];
+  const loop = diags.find((d) => d.code.value === "dml-or-soql-in-loop");
+  assert.ok(loop, "the DML-in-loop problem");
+  const actions = vscode.__state.codeActions.provideCodeActions({ uri: vscode.Uri.file(file) }, loop.range, {
+    diagnostics: [loop],
+  });
+  const titles = actions.map((a) => a.title);
+  assert.ok(titles.includes("Generate Apex tests for this change"));
+  const accept = actions.find((a) => a.title.startsWith("Accept as a known issue"));
+  assert.ok(accept);
+  await vscode.__state.commands.get(accept.command.command)(...accept.command.arguments);
+  const policy = JSON.parse(readFileSync(path.join(repo, ".preflight.json"), "utf8"));
+  assert.equal(policy.baseline, ".preflight-baseline.json");
+  const baseline = JSON.parse(readFileSync(path.join(repo, ".preflight-baseline.json"), "utf8"));
+  assert.deepEqual(
+    baseline.findings.map((f) => f.rule),
+    ["dml-or-soql-in-loop"],
+  );
+  // The next analysis hides it.
+  const before = runs();
+  await until(() => runs() > before, "an analysis after accepting", 20_000);
+  await until(
+    () => !(vscode.__state.diagnostics.get(file) ?? []).some((d) => d.code.value === "dml-or-soql-in-loop"),
+    "the accepted problem to go away",
+    20_000,
+  );
+  rmSync(path.join(repo, ".preflight-baseline.json"));
+  rmSync(path.join(repo, ".preflight.json"));
+});
+
 test("generates tests that don't count as part of the change", async () => {
   vscode.__state.answer = (_msg, _opts, ...items) => items.find((i) => i === "Generate");
   await vscode.__state.commands.get("sfPreflight.generateTests")();

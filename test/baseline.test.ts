@@ -4,7 +4,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CONDITION_RULES } from "../src/core/baseline.js";
+import { acceptIntoBaseline, CONDITION_RULES } from "../src/core/baseline.js";
 import { parseConfig } from "../src/core/config.js";
 import {
   analyze,
@@ -81,6 +81,19 @@ describe("baseline", () => {
     expect(rules(result.findings)).not.toContain("recursion-cycle");
     expect(analyzeChange({ projectDir: dir, base: "HEAD", baseline: false }).result.baseline).toBeUndefined();
     expect(applyConfig).toBeTypeOf("function");
+  });
+
+  it("accepts one finding at a time, creating the file and the policy setting once", () => {
+    const f = { rule: "recursion-cycle", title: "Automation cycle: A → B → A", severity: "high" as const };
+    expect(acceptIntoBaseline(dir, f)).toEqual({ status: "added", baselineFile: BASELINE_FILE, policyUpdated: true });
+    expect(acceptIntoBaseline(dir, f)).toEqual({
+      status: "present",
+      baselineFile: BASELINE_FILE,
+      policyUpdated: false,
+    });
+    expect(acceptIntoBaseline(dir, { ...f, rule: "deleted-still-referenced" })).toEqual({ status: "not-a-condition" });
+    writeFileSync(path.join(dir, ".preflight.json"), JSON.stringify({ baseline: "base", gate: { failOn: "high" } }));
+    expect(acceptIntoBaseline(dir, f)).toEqual({ status: "base" });
   });
 
   it('accepts only "base" or a path inside the project in the policy', () => {

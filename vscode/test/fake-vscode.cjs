@@ -117,6 +117,13 @@ const vscode = {
   ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   ProgressLocation: { Notification: 15 },
   ViewColumn: { One: 1, Beside: -2 },
+  CodeActionKind: { QuickFix: "quickfix" },
+  CodeAction: class {
+    constructor(title, kind) {
+      this.title = title;
+      this.kind = kind;
+    }
+  },
   CodeLens: class {
     constructor(range, command) {
       this.range = range;
@@ -124,6 +131,10 @@ const vscode = {
     }
   },
   languages: {
+    registerCodeActionsProvider: (selector, provider) => {
+      state.codeActions = provider;
+      return { dispose() {} };
+    },
     registerCodeLensProvider: (selector, provider) => {
       state.codeLens = provider;
       return { dispose() {} };

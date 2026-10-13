@@ -187,3 +187,58 @@ export function wholeProjectChanges(projectDir: string): Change[] {
   }
   return changes;
 }
+
+export type AcceptResult =
+  | { status: "added" | "present"; baselineFile: string; policyUpdated: boolean }
+  | { status: "base" }
+  | { status: "not-a-condition" };
+
+/**
+ * Accept one finding as known: add it to the project's baseline file, creating the file (and the
+ * policy's `"baseline"` setting) when there is none. With `"baseline": "base"` nothing is needed: findings
+ * already there are hidden anyway. Only findings about the org's state can be accepted.
+ */
+export function acceptIntoBaseline(
+  projectDir: string,
+  finding: Pick<Finding, "rule" | "title" | "severity">,
+): AcceptResult {
+  if (!CONDITION_RULES.has(finding.rule)) return { status: "not-a-condition" };
+  const policyFile = path.join(projectDir, ".preflight.json");
+  let policy: Record<string, unknown> = {};
+  try {
+    policy = JSON.parse(readFileSync(policyFile, "utf8")) as Record<string, unknown>;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT")
+      throw new Error(`Cannot read ${policyFile}: ${(err as Error).message}`);
+  }
+  if (policy.baseline === "base") return { status: "base" };
+  const rel = typeof policy.baseline === "string" ? policy.baseline : BASELINE_FILE;
+  if (path.isAbsolute(rel) || rel.split(/[\\/]/).includes(".."))
+    throw new Error(`"baseline" must be a path inside the project.`);
+  const file = path.join(projectDir, rel);
+  let data: { version: 1; findings: { rule: string; severity?: string; title: string }[] } = {
+    version: 1,
+    findings: [],
+  };
+  try {
+    data = JSON.parse(readFileSync(file, "utf8"));
+    if (data?.version !== 1 || !Array.isArray(data.findings)) throw new Error("not an sf-preflight baseline");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT")
+      throw new Error(`Cannot read ${file}: ${(err as Error).message}`);
+  }
+  const known = new Set(data.findings.map(fingerprint));
+  const present = known.has(fingerprint(finding));
+  if (!present) {
+    data.findings.push({ rule: finding.rule, severity: finding.severity, title: finding.title });
+    data.findings.sort((a, b) => a.rule.localeCompare(b.rule) || a.title.localeCompare(b.title));
+    writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+  }
+  let policyUpdated = false;
+  if (typeof policy.baseline !== "string") {
+    policy.baseline = rel;
+    writeFileSync(policyFile, `${JSON.stringify(policy, null, 2)}\n`);
+    policyUpdated = true;
+  }
+  return { status: present ? "present" : "added", baselineFile: rel, policyUpdated };
+}
