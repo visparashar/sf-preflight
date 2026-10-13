@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Needs Node.js 22.13+ and git in a Salesforce DX project; the sf-preflight MCP server or a shell that can run npx. Org commands need the Salesforce CLI (sf) logged in.
 metadata:
   homepage: https://github.com/visparashar/sf-preflight
-  version: "0.11.0"
+  version: "0.12.0"
 ---
 
 # sf-preflight
