@@ -11,6 +11,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `acceptIntoBaseline`: add one finding to the project's baseline file (the VS Code quick fix uses it).
+
+### Added
+
 - `preflight agent-hook`: a Claude Code PostToolUse hook. After the agent edits Salesforce metadata, it reports
   what that edit introduces (compared with `HEAD`) back to the agent, which fixes it in the same turn.
   `preflight agent-hook install` adds it to `.claude/settings.json`. See

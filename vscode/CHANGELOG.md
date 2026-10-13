@@ -2,6 +2,13 @@
 
 ## [0.5.0] - 2026-10-13
 
+- **Quick fixes** (the light bulb) on sf-preflight problems: open the other files involved; generate Apex tests
+  for recursion, validation-rule and loop findings; accept a finding about the org's state as a known issue,
+  which adds it to `.preflight-baseline.json` (and sets `"baseline"` in `.preflight.json` the first time) so it
+  stops being reported, in the editor, the hook and CI alike.
+
+## [Unreleased]
+
 - **As you type**: unsaved edits are analyzed after a short pause (`sfPreflight.analyzeOnType`), so findings
   show up while writing, not only after saving.
 - **Precise underlines**: a problem is underlined on the field, rule or class its finding names, or on the

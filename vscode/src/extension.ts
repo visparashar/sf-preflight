@@ -4,6 +4,7 @@ import { closeSync, existsSync, fstatSync, openSync, readFileSync, writeFileSync
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import * as vscode from "vscode";
+import { acceptIntoBaseline, CONDITION_RULES } from "../../src/core/baseline.js";
 import type { FailOn } from "../../src/core/config.js";
 import type { Insight } from "../../src/core/insight.js";
 import { installSkill } from "../../src/core/skill.js";
@@ -547,6 +548,75 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const lines = [`# ${path.basename(file)}`, "", insight.summary, ""];
       for (const d of insight.details) lines.push(`- ${d}`);
       await showMarkdown(lines.join("\n"));
+    }),
+  );
+
+  // Quick fixes on sf-preflight's problems: open the other files involved, generate the tests that
+  // exercise the change, or accept a finding about the org's state as known (the baseline).
+  context.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider(
+      [{ scheme: "file", pattern: "**/*.{cls,trigger,xml,js,html,cmp,page,component,agent}" }],
+      {
+        provideCodeActions: (doc, _range, ctx) => {
+          const actions: vscode.CodeAction[] = [];
+          for (const d of ctx.diagnostics) {
+            if (d.source !== "sf-preflight") continue;
+            const rule = typeof d.code === "object" && d.code ? String(d.code.value) : String(d.code ?? "");
+            const title = d.message.split("\n")[0] ?? "";
+            for (const r of (d.relatedInformation ?? []).slice(0, 3)) {
+              const a = new vscode.CodeAction(
+                `Open ${path.basename(r.location.uri.fsPath)} (also involved)`,
+                vscode.CodeActionKind.QuickFix,
+              );
+              a.command = { command: "vscode.open", title: "Open", arguments: [r.location.uri] };
+              a.diagnostics = [d];
+              actions.push(a);
+            }
+            if (["recursion-cycle", "automated-write-vs-validation-rule", "dml-or-soql-in-loop"].includes(rule)) {
+              const a = new vscode.CodeAction("Generate Apex tests for this change", vscode.CodeActionKind.QuickFix);
+              a.command = { command: "sfPreflight.generateTests", title: "Generate tests" };
+              a.diagnostics = [d];
+              actions.push(a);
+            }
+            if (CONDITION_RULES.has(rule)) {
+              const a = new vscode.CodeAction(
+                "Accept as a known issue (add to the baseline)",
+                vscode.CodeActionKind.QuickFix,
+              );
+              a.command = {
+                command: "sfPreflight.acceptFinding",
+                title: "Accept as known",
+                arguments: [doc.uri.fsPath, rule, title],
+              };
+              a.diagnostics = [d];
+              actions.push(a);
+            }
+          }
+          return actions;
+        },
+      },
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
+    ),
+    vscode.commands.registerCommand("sfPreflight.acceptFinding", async (file: string, rule: string, title: string) => {
+      const p = projectOf(file);
+      const finding = p?.result?.findings.find((f) => f.rule === rule && f.title === title);
+      if (!p || !finding) return;
+      try {
+        const r = acceptIntoBaseline(p.dir, finding);
+        if (r.status === "base") {
+          void vscode.window.showInformationMessage(
+            'sf-preflight: the policy uses "baseline": "base", which already hides findings that were there before the change.',
+          );
+          return;
+        }
+        if (r.status === "not-a-condition") return;
+        void vscode.window.showInformationMessage(
+          `sf-preflight: ${r.status === "added" ? "added to" : "already in"} ${r.baselineFile}${r.policyUpdated ? ', and set "baseline" in .preflight.json' : ""}. Commit both so CI and the hook agree.`,
+        );
+        void analyze(p);
+      } catch (err) {
+        void vscode.window.showErrorMessage(`sf-preflight: ${(err as Error).message}`);
+      }
     }),
   );
 

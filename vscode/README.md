@@ -36,6 +36,9 @@ Nothing to configure, and no org login needed.
 - **Before you change anything**: a line above each field, object, trigger, class and flow file says who uses it
   and what runs when its object is saved, e.g. *Used by 1 validation rule, 2 flows · saving Opportunity runs 3
   automations*. Click it for the list.
+- **Quick fixes**: on a problem, open the other files involved, generate the Apex tests that exercise the
+  change, or accept a finding about the org's state as a known issue (it goes to the baseline file, shared with
+  the hook and CI).
 - **Problems panel**: each finding on the file it's about (at the line, when known), with a link
   to the rule's explanation. High findings are errors, medium are warnings.
 - **Blast radius view** (activity bar): the change's risk, its findings, the changed components,

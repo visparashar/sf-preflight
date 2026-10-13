@@ -23,6 +23,7 @@ export {
 } from "./agentImpact.js";
 export { analyze, fieldReferences } from "./analyze.js";
 export {
+  acceptIntoBaseline,
   applyBaseline,
   BASELINE_FILE,
   fingerprint,
