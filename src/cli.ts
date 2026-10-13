@@ -3,7 +3,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Command, InvalidArgumentError, Option } from "commander";
-import type { AnalysisResult, AppliedRollback, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
+import { blocking, hookSummary, installHook, uninstallHook } from "./core/hook.js";
+import type { AnalysisResult, AppliedRollback, FailOn, SaveEvent, Severity, TestsResultFile } from "./core/index.js";
 import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
@@ -108,6 +109,7 @@ interface PolicyOptions {
   base?: string;
   head?: string;
   files?: string[];
+  staged?: boolean;
   depth: number;
   org?: string;
   failOn?: FailOn;
@@ -133,6 +135,7 @@ function analyzeWithPolicy(opts: PolicyOptions, withGate: boolean) {
     base: opts.base,
     head: opts.head,
     files: opts.files,
+    staged: opts.staged,
     maxDepth: opts.depth,
     org: opts.org,
     config: opts.config,
@@ -181,6 +184,7 @@ const policyOptions = (cmd: Command) =>
     .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
     .option("--head <ref>", "git head ref (default: working tree)")
     .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
+    .option("--staged", "the files staged for the next commit, compared with HEAD")
     .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
     .option("--org <alias>", "add read-only context from an org authorized with `sf org login` (beta)")
     .option("--config <file>", "policy file (default: .preflight.json in the project, then the git root)")
@@ -827,6 +831,46 @@ program
       }
     },
   );
+
+program
+  .command("hook")
+  .description("Check staged Salesforce metadata before each commit (a git pre-commit hook)")
+  .argument("[action]", "install, uninstall, or run (what the hook calls)", "install")
+  .option("-p, --project <dir>", "SFDX project directory", ".")
+  .addOption(
+    new Option(
+      "--fail-on <level>",
+      "block the commit on findings at or above this level (default: the policy's, else high)",
+    ).choices(["low", "medium", "high", "none"]),
+  )
+  .option("--force", "install: replace an existing pre-commit hook that isn't sf-preflight's")
+  .action((action: string, opts: { project: string; failOn?: Severity | "none"; force?: boolean }) => {
+    if (action === "install") {
+      const r = installHook(opts.project, { version, failOn: opts.failOn, force: opts.force });
+      if (r.status === "exists-other") {
+        console.error(
+          `A pre-commit hook already exists at ${r.file}. Add this line to it (or use --force to replace it):\n  npx --yes sf-preflight@${version} hook run -p ${JSON.stringify(opts.project)}`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      console.log(
+        `${r.status === "installed" ? "Installed" : "Updated"} the pre-commit hook: ${r.file}\nEach commit now checks the staged Salesforce metadata. Skip once with \`git commit --no-verify\`.`,
+      );
+      return;
+    }
+    if (action === "uninstall") {
+      const r = uninstallHook(opts.project);
+      console.log(r.removed ? `Removed ${r.file}.` : `No sf-preflight pre-commit hook at ${r.file}.`);
+      return;
+    }
+    if (action !== "run") throw new Error(`Unknown hook action: ${action} (install, uninstall or run).`);
+    const { result, policy } = analyzeChange({ projectDir: opts.project, staged: true });
+    if (!result.changes.length) return; // nothing Salesforce staged
+    const failOn = opts.failOn ?? (policy.gate?.failOn as Severity | "none" | undefined) ?? "high";
+    process.stderr.write(`${hookSummary(result, failOn)}\n`);
+    if (blocking(result, failOn).length) process.exitCode = 2;
+  });
 
 program
   .command("skill")
