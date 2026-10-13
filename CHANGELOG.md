@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `preflight agent-hook`: a Claude Code PostToolUse hook. After the agent edits Salesforce metadata, it reports
+  what that edit introduces (compared with `HEAD`) back to the agent, which fixes it in the same turn.
+  `preflight agent-hook install` adds it to `.claude/settings.json`. See
+  [docs/AI_AGENTS.md](docs/AI_AGENTS.md#4-check-every-edit-automatically-claude-code-hook).
 - Analyses accept unsaved editor text (`overlay` in the API): the VS Code extension now checks while you type.
 - `insightFor`: who uses a component and what runs when its object is saved, for editors (the extension's
   CodeLens).

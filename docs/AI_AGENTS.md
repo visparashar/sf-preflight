@@ -102,6 +102,41 @@ rules, fields, permission sets, Agentforce agents):
    pull request.
 ```
 
+## 4. Check every edit automatically (Claude Code hook)
+
+The skill and the MCP server work when the agent decides to call them. A hook makes it automatic: after each
+edit to a Salesforce metadata file, sf-preflight checks what **that edit introduces** (compared with `HEAD`, so the
+org's old problems stay out of it) and hands the findings back to the agent, which fixes them in the same turn.
+
+```bash
+npx sf-preflight agent-hook install     # in the project; adds a PostToolUse hook to .claude/settings.json
+```
+
+It adds this to `.claude/settings.json` at the repository root, keeping your other settings:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [{ "type": "command", "command": "npx --yes sf-preflight@<version> agent-hook", "timeout": 120 }]
+      }
+    ]
+  }
+}
+```
+
+After an edit that adds, say, DML inside a loop, Claude sees:
+
+> sf-preflight checked force-app/main/default/classes/ContactTriggerHandler.cls: 1 finding(s) this edit introduces …
+> - [high] DML/SOQL statement(s) inside loops in ContactTriggerHandler …
+> Fix these in your change, or explain to the user why they are acceptable.
+
+Findings at **medium** and above are reported (`--fail-on high` for fewer). Edits to other files, edits that
+introduce nothing, and any error in the hook are silent: it never interrupts the agent's turn. Other agents can
+run `preflight agent-hook --file <path>` after an edit and read the same JSON.
+
 ## Claude Code plugin
 
 For Claude Code, the plugin installs the skill and the MCP server in one step, and adds a hook:
