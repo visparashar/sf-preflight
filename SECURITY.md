@@ -57,6 +57,14 @@ Issues of particular interest include:
 - any way for `rollback --restore` to write outside the project's tracked files or over
   uncommitted changes.
 
+## Network access
+
+Analysis runs on your files and makes no network requests. The exceptions are the commands you point at
+an org or a webhook (`--org`, `monitor`, `notify`), and the daily update check: one GET of the latest
+version number from `registry.npmjs.org` (command line) or `open-vsx.org` (VS Code), with nothing about
+you or your project in it. Turn it off with `PREFLIGHT_NO_UPDATE_CHECK=1` or `sfPreflight.checkForUpdates`.
+See [Update notices](README.md#update-notices).
+
 ## Verifying releases
 
 Every release on GitHub carries the package (the npm tarball, or the VS Code extension's `.vsix`) and a

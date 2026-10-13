@@ -67,6 +67,7 @@ import {
   writeBaselineFile,
 } from "./core/index.js";
 import { bundledSkillDir, installSkill } from "./core/skill.js";
+import { startUpdateCheck } from "./updateNotice.js";
 
 // `preflight analyze | head` closes stdout early; exit quietly instead of crashing on EPIPE.
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
@@ -991,6 +992,13 @@ program
     const { startMcpServer } = await import("./mcp.js");
     await startMcpServer({ root: opts.root, version });
   });
+
+// "A newer version is available", for a person at a terminal (see updateNotice.ts).
+program.hook("preAction", (_root, action) => {
+  let top: Command = action;
+  while (top.parent && top.parent !== program) top = top.parent;
+  startUpdateCheck({ command: top.name(), version, scriptPath: process.argv[1] ?? "" });
+});
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(`preflight: ${(err as Error).message}`);

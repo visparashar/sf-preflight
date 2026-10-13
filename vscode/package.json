@@ -183,6 +183,12 @@
           "description": "Analyze unsaved edits to Salesforce metadata after a short pause in typing, so findings appear while you write.",
           "scope": "resource"
         },
+        "sfPreflight.checkForUpdates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Once a day, check Open VSX for a newer sf-preflight and offer to update. Only the extension's latest version number is requested.",
+          "scope": "application"
+        },
         "sfPreflight.codeLens": {
           "type": "boolean",
           "default": true,

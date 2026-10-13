@@ -88,6 +88,7 @@ editor's built-in Node.js; nothing else needs installing.
 | `sfPreflight.baseRef` | default branch | Branch or commit to compare with; `HEAD` for uncommitted changes only. Per workspace folder |
 | `sfPreflight.analyzeOnSave` | `true` | Analyze again when Salesforce metadata changes: saves, and also git checkouts, pulls and retrieves |
 | `sfPreflight.analyzeOnType` | `true` | Analyze unsaved edits after a short pause in typing, so findings appear while you write |
+| `sfPreflight.checkForUpdates` | `true` | Once a day, ask Open VSX for the latest version number and offer to update when a newer one is out |
 | `sfPreflight.codeLens` | `true` | Show above each metadata file who uses it and what runs when its object is saved |
 | `sfPreflight.minSeverity` | `low` | Lowest severity shown in the Problems panel |
 | `sfPreflight.depth` | `4` | Levels of automation cascade to follow |
