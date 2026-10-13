@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-13
+
 - **Fix it**: when a problem has a checked fix (see `preflight fix`), it is the first quick fix in the light
   bulb. Safe fixes apply directly; fixes that undo part of the change or should be read open VS Code's preview
   first. A fix is never applied to a file that changed since it was checked.
