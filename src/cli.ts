@@ -61,6 +61,7 @@ import {
   sendWebhook,
   shouldNotify,
   sourceRoots,
+  suggestionsFor,
   testsToMarkdown,
   toJunit,
   toMarkdown,
@@ -289,7 +290,9 @@ program
   .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
   .option("--config <file>", "policy file (default: .preflight.json in the project, then the git root)")
   .option("--no-config", "ignore .preflight.json")
+  .option("--config-ref <ref>", "read the policy from git at this ref, e.g. the pull request's base branch")
   .option("--rule <ids...>", "only fixes for these rules")
+  .option("--suggestions-out <file>", "write the fixes (of the --kinds) that fit a pull request suggestion, as JSON")
   .option("--apply", "write the fixes (by default only the safe ones; see --kinds and --only)")
   .option("--kinds <kinds>", "with --apply: which kinds to write, comma-separated (safe,undo,review)", "safe")
   .option("--only <ids...>", "with --apply: write exactly these fixes, by id, whatever their kind")
@@ -305,12 +308,15 @@ program
       depth: number;
       config?: string | false;
       rule?: string[];
+      configRef?: string;
+      suggestionsOut?: string;
       apply?: boolean;
       kinds: string;
       only?: string[];
       format: "md" | "json";
     }) => {
       if (opts.base) assertSafeRef(opts.base, "base ref");
+      if (opts.configRef) assertSafeRef(opts.configRef, "config ref");
       const run: RunOptions = {
         projectDir: opts.project,
         base: opts.base,
@@ -320,6 +326,7 @@ program
         baseline: opts.baseline,
         maxDepth: opts.depth,
         config: opts.config,
+        configRef: opts.configRef,
       };
       if (opts.apply && opts.head) throw new Error("--apply writes the working tree; it can't be used with --head.");
       const kinds = new Set(opts.kinds.split(",").map((k) => k.trim()));
@@ -348,6 +355,10 @@ program
           const missing = [...only].filter((id) => !first.fixes.some((f) => f.id === id));
           if (missing.length) process.stderr.write(`preflight: no checked fix with id ${missing.join(", ")}.\n`);
         }
+      }
+      if (opts.suggestionsOut) {
+        const { suggestions, skipped } = suggestionsFor(report.fixes.filter(wanted));
+        writeFileSync(opts.suggestionsOut, `${JSON.stringify({ suggestions, skipped }, null, 2)}\n`);
       }
       if (opts.format === "json")
         process.stdout.write(

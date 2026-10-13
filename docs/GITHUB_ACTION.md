@@ -83,6 +83,8 @@ steps:
 | `artifact-name` | `sf-preflight-evidence` | Evidence artifact name (unique per workflow run) |
 | `attest` | `false` | Sign the evidence with a GitHub artifact attestation (see below) |
 | `comment` | `true` | Post and update a PR comment (needs `pull-requests: write`) |
+| `suggest-fixes` | `false` | Post checked fixes as one-click suggested changes on the pull request (needs `pull-requests: write`). Only fixes that edit lines the pull request changed, and that touch one file, are suggested; each is posted once |
+| `suggest-fix-kinds` | `safe,undo` | Which kinds of fix to suggest: `safe`, `undo`, `review` |
 | `sarif` | `false` | Upload findings to code scanning (needs `security-events: write`) |
 | `depth` | `4` | Maximum cascade depth |
 | `sfdx-auth-url` | — | Beta: SFDX auth URL (from a secret) of a read-only integration user; adds org context |

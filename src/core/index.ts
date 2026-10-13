@@ -130,6 +130,7 @@ export { toJunit } from "./report/junit.js";
 export { toMarkdown } from "./report/markdown.js";
 export { toSarif } from "./report/sarif.js";
 export { RULES, ruleInfo } from "./rules.js";
+export { type Suggestion, suggestionFor, suggestionsFor } from "./suggestions.js";
 export {
   type GeneratedFile,
   type GeneratedTest,
