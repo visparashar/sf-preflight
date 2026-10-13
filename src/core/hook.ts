@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, fchmodSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
 import path from "node:path";
 import { git, gitRoot } from "./changes.js";
 import type { AnalysisResult, Finding, Severity } from "./types.js";
@@ -20,6 +20,14 @@ export const HOOK_MARKER = "# sf-preflight pre-commit hook";
 export function hooksDir(repoRoot: string): string {
   const p = git(repoRoot, ["rev-parse", "--git-path", "hooks"]).trim();
   return path.resolve(repoRoot, p);
+}
+
+function readIfPresent(file: string): string | undefined {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
 }
 
 const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
@@ -62,11 +70,17 @@ export function installHook(
   if (!root) throw new Error(`Not a git repository: ${dir}`);
   const hooks = hooksDir(root);
   const file = path.join(hooks, "pre-commit");
-  const existing = existsSync(file) ? readFileSync(file, "utf8") : undefined;
+  const existing = readIfPresent(file);
   if (existing !== undefined && !existing.includes(HOOK_MARKER) && !opts.force) return { file, status: "exists-other" };
   mkdirSync(hooks, { recursive: true });
-  writeFileSync(file, hookScript(toPosix(path.relative(root, dir)), opts.version, opts.failOn));
-  chmodSync(file, 0o755);
+  // One open file: create it exclusively when there was none (fails if another one appeared meanwhile).
+  const fd = openSync(file, existing === undefined ? "wx" : "w", 0o755);
+  try {
+    fchmodSync(fd, 0o755);
+    writeSync(fd, hookScript(toPosix(path.relative(root, dir)), opts.version, opts.failOn));
+  } finally {
+    closeSync(fd);
+  }
   return { file, status: existing === undefined ? "installed" : "updated" };
 }
 
@@ -75,7 +89,7 @@ export function uninstallHook(projectDir: string): { file: string; removed: bool
   const root = gitRoot(path.resolve(projectDir));
   if (!root) throw new Error(`Not a git repository: ${path.resolve(projectDir)}`);
   const file = path.join(hooksDir(root), "pre-commit");
-  if (!existsSync(file) || !readFileSync(file, "utf8").includes(HOOK_MARKER)) return { file, removed: false };
+  if (!readIfPresent(file)?.includes(HOOK_MARKER)) return { file, removed: false };
   rmSync(file);
   return { file, removed: true };
 }

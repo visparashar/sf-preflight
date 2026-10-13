@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  cpSync,
+  existsSync,
+  fstatSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -47,8 +57,10 @@ describe("pre-commit hook", () => {
   it("installs an executable hook, keeps someone else's, and uninstalls only its own", () => {
     const r = installHook(dir, { version: "9.9.9" });
     expect(r.status).toBe("installed");
-    expect(statSync(r.file).mode & 0o111).not.toBe(0);
-    expect(readFileSync(r.file, "utf8")).toContain(HOOK_MARKER);
+    const fd = openSync(r.file, "r");
+    expect(fstatSync(fd).mode & 0o111).not.toBe(0);
+    expect(readFileSync(fd, "utf8")).toContain(HOOK_MARKER);
+    closeSync(fd);
     expect(installHook(dir, { version: "9.9.9" }).status).toBe("updated");
     writeFileSync(r.file, "#!/bin/sh\necho mine\n");
     expect(installHook(dir, { version: "9.9.9" }).status).toBe("exists-other");
