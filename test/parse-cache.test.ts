@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
+  closeSync,
   cpSync,
+  fstatSync,
+  ftruncateSync,
+  futimesSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
-  statSync,
   utimesSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -143,9 +148,16 @@ describe("parse cache", () => {
     // the trade the cache makes (git makes the same one).
     const file = readdirSync(dir).find((f) => f.endsWith(".cls")) as string;
     const target = path.join(dir, file);
-    const st = statSync(target);
-    writeFileSync(target, "x".repeat(st.size));
-    utimesSync(target, st.atime, st.mtime);
+    // One file handle for reading the size and time, rewriting and putting the time back.
+    const fd = openSync(target, "r+");
+    try {
+      const st = fstatSync(fd);
+      ftruncateSync(fd, 0);
+      writeSync(fd, "x".repeat(st.size), 0);
+      futimesSync(fd, st.atime, st.mtime);
+    } finally {
+      closeSync(fd);
+    }
     const second = loadProject(project, { cache: true });
     const name = file.replace(/\.cls$/, "").toLowerCase();
     expect(JSON.stringify(second.classes.get(name)?.writes)).toBe(JSON.stringify(first.classes.get(name)?.writes));
