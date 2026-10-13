@@ -24,6 +24,7 @@ in the org, permission assignments, an agent runtime user's real access.
 
 | Goal | MCP | CLI |
 |---|---|---|
+| Check a fix you wrote (nothing written) | `check_fix` (`edits`: path + whole new content; `finding`: fix or rule id) | — |
 | Checked fixes as diffs (nothing written) | `suggest_fixes` (same arguments as `analyze_change`, plus `rules`) | `fix --base HEAD` (`--format json` for the diffs as data) |
 | Write the safe fixes | apply the diffs yourself | `fix --base HEAD --apply` |
 | Fixes as pull request suggestions (JSON) | — | `fix --base HEAD --kinds safe,undo --suggestions-out out.json` |

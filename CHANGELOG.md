@@ -26,6 +26,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     that runs the methods the scripts name; `update`/`insert`/`delete` of a loop variable moved to one save after
     the loop (only in the plain shape: no `return`, `try` or later use of the record).
   - `suggest_fixes` MCP tool: the same checked diffs for coding agents (it writes nothing).
+  - `check_fix` MCP tool: runs the same check on an edit an agent wrote itself ("fix with AI"), so a fix
+    for a finding without a built-in fix is verified before it is written. sf-preflight makes no model
+    calls of its own.
 
 - **Update notice**: when a newer release is on npm, a short banner after a command says so, with the update
   command for how sf-preflight was started (`npx`, project or global install). Checked at most once a day by

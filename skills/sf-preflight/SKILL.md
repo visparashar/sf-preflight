@@ -19,7 +19,7 @@ metadata that produced it.
 
 Use whichever your environment has:
 
-- **MCP tools** (preferred when present): `analyze_change`, `suggest_fixes`, `generate_tests`,
+- **MCP tools** (preferred when present): `analyze_change`, `suggest_fixes`, `check_fix`, `generate_tests`,
   `explain_save_order`, `find_field_references`, `explain_agent`, `plan_rollback`.
 - **Shell**: `npx -y sf-preflight <command>` from the SFDX project root (the folder with
   `sfdx-project.json`). Add `--format json` when you need to read the result yourself.
@@ -46,6 +46,9 @@ Command details and options: [references/commands.md](references/commands.md).
      sf-preflight has already verified (the finding goes away, nothing new appears). Apply the
      `safe` ones; an `undo` fix reverses part of what was asked for, so confirm it with the user
      first; read a `review` fix before applying it.
+   - **Your own fix**: for a finding with no checked fix, write the fix, then pass the new file
+     contents to `check_fix` (with `finding` set to the fix id or rule id) before writing them. Only
+     write it if the verdict is `accepted`; `rejected` says what is still reported or newly broken.
 6. **Generate tests** for what the change sets off (bulk, recursion, idempotency, validation
    errors surfacing): `generate_tests` returns the Apex, which you write into the project;
    `npx -y sf-preflight tests --base HEAD` writes the classes itself (to `preflight-tests/`, or
