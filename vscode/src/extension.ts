@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import * as vscode from "vscode";
@@ -222,12 +222,17 @@ class BlastRadiusProvider implements vscode.TreeDataProvider<TreeNode> {
 
 /** Text of a file as the editor shows it: the open document's (unsaved edits included), else from disk. */
 function openText(file: string): string | undefined {
-  const doc = vscode.workspace.textDocuments.find((d) => d.uri.scheme === "file" && d.uri.fsPath === file);
+  const doc = vscode.workspace.textDocuments.find((d) => (d.uri.scheme ?? "file") === "file" && d.uri.fsPath === file);
   if (doc) return doc.getText();
+  // One open file for the size check and the read.
+  let fd: number | undefined;
   try {
-    return statSync(file).size > 2_000_000 ? undefined : readFileSync(file, "utf8");
+    fd = openSync(file, "r");
+    return fstatSync(fd).size > 2_000_000 ? undefined : readFileSync(fd, "utf8");
   } catch {
     return undefined;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 
@@ -235,7 +240,7 @@ function openText(file: string): string | undefined {
 function unsavedIn(dir: string): Record<string, string> | undefined {
   const out: Record<string, string> = {};
   for (const d of vscode.workspace.textDocuments) {
-    if (d.isDirty && d.uri.scheme === "file" && isMetadataFile(d.uri.fsPath) && inside(dir, d.uri.fsPath))
+    if (d.isDirty && (d.uri.scheme ?? "file") === "file" && isMetadataFile(d.uri.fsPath) && inside(dir, d.uri.fsPath))
       out[d.uri.fsPath] = d.getText();
   }
   return Object.keys(out).length ? out : undefined;
@@ -467,7 +472,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // As you type: unsaved edits are analyzed after a short pause (the editor's text, not the disk's).
     vscode.workspace.onDidChangeTextDocument((e) => {
       const file = e.document.uri.fsPath;
-      if (e.document.uri.scheme !== "file" || !e.contentChanges.length || !isMetadataFile(file)) return;
+      if ((e.document.uri.scheme ?? "file") !== "file" || !e.contentChanges.length || !isMetadataFile(file)) return;
       const p = projectOf(file);
       if (!p || !config(p.dir).get<boolean>("analyzeOnType", true)) return;
       clearTimeout(typingTimers.get(p.dir));
