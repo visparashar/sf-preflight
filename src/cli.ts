@@ -3,6 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Command, InvalidArgumentError, Option } from "commander";
+import { editedFiles, installAgentHook, runAgentHook } from "./core/agentHook.js";
 import { blocking, hookSummary, installHook, uninstallHook } from "./core/hook.js";
 import type { AnalysisResult, AppliedRollback, FailOn, SaveEvent, Severity, TestsResultFile } from "./core/index.js";
 import {
@@ -844,6 +845,50 @@ program
       }
     },
   );
+
+program
+  .command("agent-hook")
+  .description(
+    "For AI coding agents: after an edit, report what it introduces so the agent fixes it (a Claude Code PostToolUse hook)",
+  )
+  .argument("[action]", "run (reads the hook's JSON on stdin) or install (adds it to .claude/settings.json)", "run")
+  .option("-p, --project <dir>", "project to install into", ".")
+  .option("--file <paths...>", "run: check these files instead of reading the hook's JSON")
+  .addOption(
+    new Option("--fail-on <level>", "report findings at or above this level to the agent")
+      .choices(["low", "medium", "high"])
+      .default("medium"),
+  )
+  .action(async (action: string, opts: { project: string; file?: string[]; failOn: Severity }) => {
+    if (action === "install") {
+      const r = installAgentHook(opts.project, `npx --yes sf-preflight@${version} agent-hook`);
+      console.log(
+        r.status === "installed"
+          ? `Added the sf-preflight hook to ${r.file}.\nAfter Claude Code edits Salesforce metadata, it now sees the findings its edit introduces.`
+          : `The sf-preflight hook is already in ${r.file}.`,
+      );
+      return;
+    }
+    if (action !== "run") throw new Error(`Unknown agent-hook action: ${action} (run or install).`);
+    // Never break the agent's turn: a problem here means no feedback, not an error.
+    try {
+      let files = opts.file ?? [];
+      let cwd: string | undefined;
+      if (!files.length) {
+        if (process.stdin.isTTY) return;
+        const chunks: Buffer[] = [];
+        for await (const c of process.stdin) chunks.push(c as Buffer);
+        const input = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { cwd?: string };
+        files = editedFiles(input);
+        cwd = typeof input.cwd === "string" ? input.cwd : undefined;
+      }
+      if (!files.length) return;
+      const { output } = runAgentHook(files, { failOn: opts.failOn, cwd });
+      if (output) process.stdout.write(`${JSON.stringify(output)}\n`);
+    } catch (err) {
+      process.stderr.write(`sf-preflight agent hook: ${(err as Error).message}\n`);
+    }
+  });
 
 program
   .command("baseline")
