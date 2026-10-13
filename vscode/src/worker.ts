@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Runs sf-preflight in a worker thread, so a large project never blocks the editor. One job per
- * worker: the extension sends a request and gets back one message.
+ * Runs sf-preflight in a worker thread, so a large project never blocks the editor. The worker
+ * stays up between requests (`{ id, req }` in, `{ id, ok, value | error }` out), so what it has
+ * already loaded, such as the parse cache, is reused on the next pause in typing.
  */
 import { existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parentPort, workerData } from "node:worker_threads";
+import { parentPort } from "node:worker_threads";
 import {
   analyzeChange,
   generateTests,
@@ -88,8 +89,19 @@ function handle(req: WorkerRequest): unknown {
   }
 }
 
-try {
-  parentPort?.postMessage({ ok: true, value: handle(workerData as WorkerRequest) });
-} catch (err) {
-  parentPort?.postMessage({ ok: false, error: (err as Error).message });
+export interface WorkerReply {
+  id: number;
+  ok: boolean;
+  value?: unknown;
+  error?: string;
 }
+
+parentPort?.on("message", ({ id, req }: { id: number; req: WorkerRequest }) => {
+  let reply: WorkerReply;
+  try {
+    reply = { id, ok: true, value: handle(req) };
+  } catch (err) {
+    reply = { id, ok: false, error: (err as Error).message };
+  }
+  parentPort?.postMessage(reply);
+});

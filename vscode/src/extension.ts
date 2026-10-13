@@ -2,7 +2,6 @@
 import { execFile } from "node:child_process";
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { Worker } from "node:worker_threads";
 import * as vscode from "vscode";
 import { acceptIntoBaseline, CONDITION_RULES } from "../../src/core/baseline.js";
 import type { FailOn } from "../../src/core/config.js";
@@ -14,6 +13,7 @@ import { DashboardPanel, type DashboardSource } from "./dashboard-panel.js";
 import { GraphPanel, type GraphSource } from "./graph-panel.js";
 import { isMetadataFile, locate, problemsOf, RULES_URL, type Span, statusOf, type TreeNode, treeOf } from "./model.js";
 import type { WorkerRequest } from "./worker.js";
+import { WorkerPool } from "./workerPool.js";
 
 /** The parts of VS Code's MCP API (1.101+) the extension uses; absent in older editors. */
 interface McpApi {
@@ -135,29 +135,16 @@ function limiter(max: number) {
   };
 }
 
+let pool: WorkerPool | undefined;
+
 function runWorker<T>(context: vscode.ExtensionContext, req: WorkerRequest): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(path.join(context.extensionPath, "dist", "worker.js"), { workerData: req });
-    let settled = false;
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      fn();
-    };
-    const timer = setTimeout(() => {
-      void worker.terminate();
-      finish(() => reject(new Error("sf-preflight took longer than 2 minutes and was stopped.")));
-    }, 120_000);
-    worker.once("message", (msg: { ok: boolean; value?: T; error?: string }) => {
-      void worker.terminate();
-      finish(() => (msg.ok ? resolve(msg.value as T) : reject(new Error(msg.error ?? "sf-preflight failed"))));
-    });
-    worker.once("error", (err) => finish(() => reject(err)));
-    worker.once("exit", (code) =>
-      finish(() => reject(new Error(`sf-preflight stopped unexpectedly (exit code ${code}).`))),
-    );
+  pool ??= new WorkerPool(path.join(context.extensionPath, "dist", "worker.js"), {
+    size: MAX_PARALLEL,
+    idleMs: 5 * 60_000,
+    timeoutMs: 120_000,
+    timeoutMessage: "sf-preflight took longer than 2 minutes and was stopped.",
   });
+  return pool.run<T>(req);
 }
 
 /** Is `file` inside `dir`? (Not on another drive, not a sibling with a longer name.) */
@@ -895,5 +882,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
-  // Disposables are cleaned up through the extension context.
+  // Disposables are cleaned up through the extension context; the analysis workers are ours to end.
+  pool?.dispose();
+  pool = undefined;
 }

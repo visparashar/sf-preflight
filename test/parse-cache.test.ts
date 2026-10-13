@@ -1,8 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  cpSync,
+  fstatSync,
+  ftruncateSync,
+  futimesSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { statSignature } from "../src/core/parseCache.js";
 import { loadProject } from "../src/core/project.js";
 
 let work: string;
@@ -100,5 +116,72 @@ describe("parse cache", () => {
   it("writes nothing when disabled", () => {
     loadProject(project, { cache: false });
     expect(() => readdirSync(cacheRoot)).toThrow();
+  });
+
+  it("gives each class its stripped source, computed on first use", () => {
+    const m = loadProject(project, { cache: true });
+    const cls = [...m.classes.values()][0]!;
+    const src = readFileSync(path.join(project, cls.file), "utf8");
+    expect(cls.stripped.length).toBe(src.length);
+    expect(cls.stripped).not.toMatch(/\/\/.*edited|'[^']+'/);
+  });
+
+  it("checks recently modified files by content, so a same-size edit is never missed", () => {
+    const target = path.join(classesDir(), "SameSize.cls");
+    const body = "public class SameSize { public static void run() { insert new Account(); } }\n";
+    writeFileSync(target, body);
+    expect(loadProject(project, { cache: true }).classes.get("samesize")?.writes[0]?.op).toBe("insert");
+    // Same length, different code, written within the same second.
+    const edited = body.replace("insert ", "delete ");
+    expect(edited.length).toBe(body.length);
+    writeFileSync(target, edited);
+    expect(statSignature(target)).toBeUndefined();
+    expect(loadProject(project, { cache: true }).classes.get("samesize")?.writes[0]?.op).toBe("delete");
+  });
+
+  it("trusts size and time for files untouched for a while", () => {
+    const old = new Date(Date.now() - 60_000);
+    const dir = classesDir();
+    for (const f of readdirSync(dir)) utimesSync(path.join(dir, f), old, old);
+    const first = loadProject(project, { cache: true });
+    // A file whose content changes but whose size and time are put back is not read again: this is
+    // the trade the cache makes (git makes the same one).
+    const file = readdirSync(dir).find((f) => f.endsWith(".cls")) as string;
+    const target = path.join(dir, file);
+    // One file handle for reading the size and time, rewriting and putting the time back.
+    const fd = openSync(target, "r+");
+    try {
+      const st = fstatSync(fd);
+      ftruncateSync(fd, 0);
+      writeSync(fd, "x".repeat(st.size), 0);
+      futimesSync(fd, st.atime, st.mtime);
+    } finally {
+      closeSync(fd);
+    }
+    const second = loadProject(project, { cache: true });
+    const name = file.replace(/\.cls$/, "").toLowerCase();
+    expect(JSON.stringify(second.classes.get(name)?.writes)).toBe(JSON.stringify(first.classes.get(name)?.writes));
+    // Touch it and it is read again.
+    utimesSync(target, old, new Date(Date.now() - 30_000));
+    expect(loadProject(project, { cache: true }).classes.get(name)?.writes ?? []).toEqual([]);
+  });
+
+  it("keeps a separate file per analyzer build and removes a project's stale ones", () => {
+    loadProject(project, { cache: true });
+    const [current] = readdirSync(cacheRoot);
+    const prefix = current!.split("-")[0]!;
+    const stale = path.join(cacheRoot, `${prefix}-0123456789ab.json`);
+    const recent = path.join(cacheRoot, `${prefix}-ba9876543210.json`);
+    const other = path.join(cacheRoot, "ffffffffffffffffffffffff-0123456789ab.json");
+    for (const f of [stale, recent, other]) writeFileSync(f, "{}");
+    const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    utimesSync(stale, old, old);
+    utimesSync(other, old, old);
+    // A change makes the cache save, which prunes.
+    const dir = classesDir();
+    const file = readdirSync(dir).find((f) => f.endsWith(".cls")) as string;
+    writeFileSync(path.join(dir, file), `${readFileSync(path.join(dir, file), "utf8")}\n// edit\n`);
+    loadProject(project, { cache: true });
+    expect(readdirSync(cacheRoot).sort()).toEqual([current, path.basename(recent), path.basename(other)].sort());
   });
 });

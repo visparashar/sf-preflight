@@ -4,7 +4,7 @@ import path from "node:path";
 import { parseApexUnit } from "./apexUnit.js";
 import { applyCallGraph } from "./callGraph.js";
 import { METADATA_BY_DIR, METADATA_BY_SUFFIX, METADATA_DIR_BY_SUFFIX, METADATA_FOLDERED } from "./metadataTypes.js";
-import { ParseCache } from "./parseCache.js";
+import { ParseCache, type SourceOf, statSignature } from "./parseCache.js";
 import {
   agentFileKind,
   emptyAgentMetadata,
@@ -209,6 +209,33 @@ function loadPages(model: OrgModel, read: (rel: string) => string): void {
 }
 
 /** Load and parse every supported metadata file in an SFDX project. */
+/**
+ * Give an Apex definition its `stripped` source (comments and strings blanked), computed the first
+ * time something reads it. Only a few checks need it, and computing it for every class on every load
+ * cost more than the rest of loading a project whose parse cache is warm.
+ */
+function lazyStripped<T extends { stripped: string }>(def: Omit<T, "stripped">, src: SourceOf): T {
+  let memo: string | undefined;
+  Object.defineProperty(def, "stripped", {
+    enumerable: true,
+    configurable: true,
+    get() {
+      if (memo === undefined) {
+        try {
+          memo = stripApex(src.read());
+        } catch {
+          memo = ""; // removed or unreadable since loading
+        }
+      }
+      return memo;
+    },
+    set(v: string) {
+      memo = v;
+    },
+  });
+  return def as T;
+}
+
 export function loadProject(
   projectDirInput: string,
   /** `cacheKey`: use another directory's parse cache (a copy of the same project, e.g. at the base ref). */
@@ -251,15 +278,37 @@ export function loadProject(
     if (ref.type === "CustomObject") ensureObject(model, ref.name).file = ref.file;
   }
   const projectObjects = new Set(model.objects.keys());
-  const cache = new ParseCache(opts.cacheKey ?? projectDir, projectObjects, opts.cache);
+  const cache = new ParseCache(
+    opts.cacheKey ?? projectDir,
+    projectObjects,
+    opts.cache,
+    !opts.cacheKey || path.resolve(opts.cacheKey) === projectDir,
+  );
 
   const read = (rel: string) => opts.overlay?.get(rel) ?? readFileSync(path.join(projectDir, rel), "utf8");
+  // Apex sources: read at most once, and only when the cache can't vouch for the file.
+  const sources = new Map<string, SourceOf>();
+  const sourceOf = (rel: string): SourceOf => {
+    let src = sources.get(rel);
+    if (!src) {
+      let text: string | undefined;
+      src = {
+        sig: opts.overlay?.has(rel) ? undefined : statSignature(path.join(projectDir, rel)),
+        read: () => {
+          text ??= read(rel);
+          return text;
+        },
+      };
+      sources.set(rel, src);
+    }
+    return src;
+  };
   cache.prefill(
-    refs.flatMap((ref): { file: string; kind: "class" | "trigger"; name: string; source: () => string }[] =>
+    refs.flatMap((ref): { file: string; kind: "class" | "trigger"; name: string; src: SourceOf }[] =>
       ref.type === "ApexClass" && ref.file.endsWith(".cls")
-        ? [{ file: ref.file, kind: "class" as const, name: ref.name, source: () => read(ref.file) }]
+        ? [{ file: ref.file, kind: "class" as const, name: ref.name, src: sourceOf(ref.file) }]
         : ref.type === "ApexTrigger" && ref.file.endsWith(".trigger")
-          ? [{ file: ref.file, kind: "trigger" as const, name: ref.name, source: () => read(ref.file) }]
+          ? [{ file: ref.file, kind: "trigger" as const, name: ref.name, src: sourceOf(ref.file) }]
           : [],
     ),
     projectObjects,
@@ -310,15 +359,16 @@ export function loadProject(
       case "ApexTrigger":
         if (!ref.file.endsWith(".trigger")) break;
         safely(ref, () => {
-          const source = read(ref.file);
-          const { def } = cache.get(ref.file, source, () =>
+          const src = sourceOf(ref.file);
+          const { def } = cache.get(ref.file, src, (source) =>
             parseApexUnit("trigger", source, ref.name, ref.file, projectObjects),
           ) as { def?: object };
-          const trig: ApexTriggerDef | undefined = def && {
-            ...(def as Omit<ApexTriggerDef, "stripped" | "file">),
-            stripped: stripApex(source),
-            file: ref.file,
-          };
+          const trig =
+            def &&
+            lazyStripped<ApexTriggerDef>(
+              { ...(def as Omit<ApexTriggerDef, "stripped" | "file">), file: ref.file },
+              src,
+            );
           if (trig) model.triggers.set(key(trig.name), trig);
           else model.warnings.push(`No trigger header found in ${ref.file}`);
         });
@@ -326,11 +376,11 @@ export function loadProject(
       case "ApexClass":
         if (!ref.file.endsWith(".cls")) break;
         safely(ref, () => {
-          const source = read(ref.file);
-          const rest = cache.get(ref.file, source, () =>
+          const src = sourceOf(ref.file);
+          const rest = cache.get(ref.file, src, (source) =>
             parseApexUnit("class", source, ref.name, ref.file, projectObjects),
           ) as Omit<ApexClassDef, "stripped" | "name" | "file">;
-          const cls: ApexClassDef = { ...rest, stripped: stripApex(source), name: ref.name, file: ref.file };
+          const cls = lazyStripped<ApexClassDef>({ ...rest, name: ref.name, file: ref.file }, src);
           model.classes.set(key(cls.name), cls);
         });
         break;
