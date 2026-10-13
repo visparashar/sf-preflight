@@ -9,6 +9,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import {
   analyzeChange,
   generateTests,
+  insightFor,
   loadProject,
   saveProcedure,
   testsToMarkdown,
@@ -17,7 +18,8 @@ import {
 import type { SaveEvent } from "../../src/core/types.js";
 
 export type WorkerRequest =
-  | { kind: "analyze"; projectDir: string; base: string; depth: number }
+  | { kind: "analyze"; projectDir: string; base: string; depth: number; overlay?: Record<string, string> }
+  | { kind: "insight"; projectDir: string; file: string; overlay?: Record<string, string> }
   | { kind: "tests"; projectDir: string; base: string; depth: number; outDir: string }
   | { kind: "explain"; projectDir: string; object: string; event: SaveEvent }
   | { kind: "objects"; projectDir: string };
@@ -41,7 +43,12 @@ function assertInside(project: string, target: string): void {
 function handle(req: WorkerRequest): unknown {
   switch (req.kind) {
     case "analyze": {
-      const { result, policy } = analyzeChange({ projectDir: req.projectDir, base: req.base, maxDepth: req.depth });
+      const { result, policy } = analyzeChange({
+        projectDir: req.projectDir,
+        base: req.base,
+        maxDepth: req.depth,
+        overlay: req.overlay,
+      });
       // The gate's threshold from .preflight.json, for the dashboard's gate check.
       return { result, markdown: toMarkdown(result), failOn: policy.gate?.failOn ?? "high" };
     }
@@ -62,6 +69,17 @@ function handle(req: WorkerRequest): unknown {
     case "explain": {
       const model = loadProject(req.projectDir);
       return { procedure: saveProcedure(model, req.object, req.event) };
+    }
+    case "insight": {
+      const overlay = new Map(
+        Object.entries(req.overlay ?? {}).map(([f, t]) => [
+          path.relative(req.projectDir, f).split(path.sep).join("/"),
+          t,
+        ]),
+      );
+      const model = loadProject(req.projectDir, { overlay });
+      const rel = path.relative(req.projectDir, req.file).split(path.sep).join("/");
+      return insightFor(model, rel);
     }
     case "objects": {
       const model = loadProject(req.projectDir);

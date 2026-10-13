@@ -117,7 +117,17 @@ const vscode = {
   ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   ProgressLocation: { Notification: 15 },
   ViewColumn: { One: 1, Beside: -2 },
+  CodeLens: class {
+    constructor(range, command) {
+      this.range = range;
+      this.command = command;
+    }
+  },
   languages: {
+    registerCodeLensProvider: (selector, provider) => {
+      state.codeLens = provider;
+      return { dispose() {} };
+    },
     createDiagnosticCollection: () => ({
       clear: () => state.diagnostics.clear(),
       set: (uri, list) => state.diagnostics.set(uri.fsPath, list),
@@ -209,6 +219,13 @@ const vscode = {
       return { uri: Uri.parse("untitled:report") };
     },
     onDidSaveTextDocument: noop,
+    onDidChangeTextDocument: (fn) => {
+      state.onTextChange = fn;
+      return { dispose() {} };
+    },
+    get textDocuments() {
+      return state.textDocuments ?? [];
+    },
     onDidCreateFiles: noop,
     onDidDeleteFiles: noop,
     onDidRenameFiles: noop,
