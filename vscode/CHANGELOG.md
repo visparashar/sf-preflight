@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.5.0] - 2026-10-13
 
 - **As you type**: unsaved edits are analyzed after a short pause (`sfPreflight.analyzeOnType`), so findings
   show up while writing, not only after saving.
@@ -8,6 +8,8 @@
   statement's line for Apex findings, instead of the first line of the file.
 - **CodeLens** above field, object, validation rule, trigger, class, flow and Lightning component files: who uses
   it and what runs when its object is saved (`sfPreflight.codeLens`).
+- Brings sf-preflight 0.11.0's analysis: baseline mode (only what a change introduces, from `.preflight.json`),
+  `--staged` and the property-based fuzzing fixes.
 
 ## [0.4.0] - 2026-10-09
 

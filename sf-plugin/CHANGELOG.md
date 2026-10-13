@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.11.0]
+
+- Same version as the CLI: `--staged` and `--baseline` work through `sf preflight analyze`; the pre-commit and agent hooks are CLI commands (`preflight hook`, `preflight agent-hook`).
+
 ## [0.10.1]
 
 - Same version as the CLI. The plugin's commands are unchanged.
