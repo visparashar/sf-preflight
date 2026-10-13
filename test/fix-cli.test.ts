@@ -49,6 +49,27 @@ describe("preflight fix", () => {
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
+  it("writes the fixes that fit a pull request suggestion", () => {
+    const out = path.join(dir, "suggestions.json");
+    cli("--format", "json", "--kinds", "safe,undo", "--suggestions-out", out);
+    const { suggestions } = JSON.parse(readFileSync(out, "utf8")) as {
+      suggestions: { path: string; startLine: number; endLine: number; current: string[]; replacement: string[] }[];
+    };
+    const https = suggestions.find((x) => x.path === NC)!;
+    expect(https).toMatchObject({
+      startLine: 2,
+      endLine: 2,
+      current: ["    <endpoint>http://api.pay.example.com</endpoint>"],
+      replacement: ["    <endpoint>https://api.pay.example.com</endpoint>"],
+    });
+    expect(suggestions.find((x) => x.path === PS)).toMatchObject({
+      current: ["        <modifyAllRecords>true</modifyAllRecords>"],
+    });
+    // Only the kinds asked for.
+    cli("--format", "json", "--suggestions-out", out);
+    expect((JSON.parse(readFileSync(out, "utf8")).suggestions as unknown[]).length).toBe(1);
+  });
+
   it("shows checked fixes as diffs, without writing anything", () => {
     const r = cli();
     expect(r.status).toBe(0);

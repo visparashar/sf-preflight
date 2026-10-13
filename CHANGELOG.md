@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Fixes as suggested changes on pull requests**: the GitHub Action's `suggest-fixes: true` posts checked fixes as
+  suggested changes the author applies with one click (`suggest-fix-kinds`, default `safe,undo`). Only a fix that
+  edits one file, on lines the pull request changed and that are still as analyzed, is suggested; each fix is posted
+  once. `preflight fix --suggestions-out <file>` writes the same suggestions as JSON, and `--config-ref` reads the
+  policy from the base branch as `analyze` does.
 - **Checked fixes**: `preflight fix` proposes edits for findings with a mechanical fix and checks each one
   by analyzing the change again with it applied; a fix is kept only if its finding is gone and no new high or
   medium finding appears. `--apply` writes the safe ones (`--kinds`, `--only <id>` for more); a file that changed
