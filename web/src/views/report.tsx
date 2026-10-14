@@ -44,6 +44,7 @@ const AUTOMATION_LABEL: Record<AutomationKind, string> = {
   IntegrationProcedure: "Integration Procedure",
   DataMapper: "Data Mapper",
   FlexCard: "FlexCard",
+  CascadeDelete: "Cascade delete",
   Change: "The change",
 };
 
