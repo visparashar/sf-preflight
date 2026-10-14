@@ -96,6 +96,18 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
   for (const el of nodes(body.recordCreates)) addWrite(el, "insert");
   for (const el of nodes(body.recordDeletes)) addWrite(el, "delete");
 
+  // Assignments to the triggering record's fields: how a before-save flow changes the record.
+  const fieldSets: string[] = [];
+  if (trigger?.timing === "before") {
+    // "Update Records" on $Record in a before-save flow sets fields in memory too.
+    for (const w of writes) if (w.selfUpdate) fieldSets.push(...(w.fields ?? []));
+    for (const el of nodes(body.assignments))
+      for (const item of nodes(el.assignmentItems)) {
+        const m = /^\$Record\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(text(item.assignToReference) ?? "");
+        if (m) fieldSets.push(m[1]!);
+      }
+  }
+
   const reads: string[] = [];
   for (const el of nodes(body.recordLookups)) {
     const object = text(el.object);
@@ -140,6 +152,7 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
         ? text((body.start as XmlNode | undefined)?.object)
         : undefined,
     writes: uniqBy(writes, (w) => `${w.object}|${w.op}|${w.via}`),
+    fieldSets: uniq(fieldSets),
     reads: uniq(reads),
     apexActions,
     subflows,

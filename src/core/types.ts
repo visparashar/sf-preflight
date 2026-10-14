@@ -153,6 +153,8 @@ export interface FlowDef {
   /** Set for flows started by a platform event: the event's API name. */
   platformEvent?: string;
   writes: Write[];
+  /** Fields of the triggering record that Assignment elements set (a before-save flow's field updates). */
+  fieldSets: string[];
   reads: string[];
   apexActions: string[];
   subflows: string[];

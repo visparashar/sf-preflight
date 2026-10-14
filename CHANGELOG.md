@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Before-save flows: the fields they set**: Assignment elements (and Update Records on `$Record`) in a
+  before-save flow are read as the fields it sets. The save-order explanation shows them on the flow's step
+  (`sets Region__c`), and a new or changed validation rule's finding names the before-save flows that set the fields
+  it checks. The set of findings does not change, only their detail.
+
 ### Changed
 
 - **Recursion cycles say where to break them**: the finding names the flows to limit with entry criteria

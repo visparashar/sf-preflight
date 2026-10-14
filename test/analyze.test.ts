@@ -45,6 +45,8 @@ describe("saveProcedure", () => {
       "Opportunity_Closed_Won_Followup",
       "Account.Total_Won_Amount__c",
     ]);
+    // A before-save flow's field updates are shown on its step.
+    expect(p.steps[0]!.notes).toContain("sets Probability");
   });
 
   it("does not run validation rules on delete", () => {

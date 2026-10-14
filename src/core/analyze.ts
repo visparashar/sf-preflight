@@ -541,7 +541,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
             rule: "validation-rule-vs-existing-automation",
             severity: change.changeType === "added" ? "high" : "medium",
             title: `${change.changeType === "added" ? "New" : "Changed"} validation rule ${comp.name} applies to ${writers.length} automation(s) that write ${object}`,
-            detail: `${writers.map((w) => describe(w.automation)).join(", ")} must now satisfy: ${vr.formula.replace(/\s+/g, " ").trim()}. If they don't set the fields it checks, their saves will fail.`,
+            detail: `${writers.map((w) => describe(w.automation)).join(", ")} must now satisfy: ${vr.formula.replace(/\s+/g, " ").trim()}. If they don't set the fields it checks, their saves will fail.${beforeSaveSetters(model, object, vr.fieldRefs)}`,
             object,
             files: uniq([vr.file, ...writers.map((w) => w.automation.file!).filter(Boolean)]),
           });
@@ -1429,4 +1429,19 @@ function recursionAdvice(autos: AutomationRef[]): string {
       `In ${apex.map((a) => a.name).join(", ")}, guard with a static Set<Id> of records already processed and skip those, not a static Boolean (a Boolean also skips the next 200-record chunk of the same transaction).`,
     );
   return parts.length ? ` ${parts.join(" ")}` : "";
+}
+
+/**
+ * Before-save flows that set fields a validation rule checks. They run before the rule, so they can
+ * make a save pass or fail; the writers a rule is checked against don't include them.
+ */
+function beforeSaveSetters(model: OrgModel, object: string, ruleFields: string[]): string {
+  const checked = new Set(ruleFields.map(key));
+  const sets: string[] = [];
+  for (const flow of model.flows.values()) {
+    if (!flow.active || flow.trigger?.timing !== "before" || key(flow.trigger.object) !== key(object)) continue;
+    const hit = flow.fieldSets.filter((f) => checked.has(key(f)));
+    if (hit.length) sets.push(`${flow.name} (sets ${hit.join(", ")})`);
+  }
+  return sets.length ? ` Before-save flows that set what it checks: ${sets.join(", ")}; they run before the rule.` : "";
 }
