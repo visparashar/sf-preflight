@@ -88,6 +88,7 @@ const AUTOMATION_KIND: Record<AutomationRef["kind"], GraphNodeKind> = {
   IntegrationProcedure: "Other",
   DataMapper: "Other",
   FlexCard: "Other",
+  CascadeDelete: "Other",
   Change: "Other",
 };
 

@@ -94,6 +94,8 @@ export interface FieldDef {
   /** `<required>true</required>` (master-detail fields are always required). */
   required?: boolean;
   defaultValue?: string;
+  /** Deleting the parent record deletes the records that point at it (master-detail, or lookup with "Delete the lookup record's children"). */
+  cascadeDelete?: boolean;
   /** Picklist fields: the values defined on the field itself, or the global value set it uses. */
   picklist?: { values: { name: string; active: boolean }[]; valueSetName?: string };
   /** Roll-up summary: this field (on the parent) is recalculated when `childObject` records change. */
@@ -510,6 +512,7 @@ export type AutomationKind =
   | "IntegrationProcedure"
   | "DataMapper"
   | "FlexCard"
+  | "CascadeDelete"
   | "Change";
 
 export interface AutomationRef {
@@ -530,6 +533,7 @@ export type Phase =
   | "workflow"
   | "escalation"
   | "after-flow"
+  | "cascade-delete"
   | "rollup";
 
 export interface SaveStep {

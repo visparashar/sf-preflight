@@ -31,6 +31,7 @@ export const PHASE_LABELS: Record<Phase, string> = {
   workflow: "Workflow rule",
   escalation: "Escalation rule",
   "after-flow": "After-save flow",
+  "cascade-delete": "Cascade delete",
   rollup: "Roll-up summary",
 };
 
@@ -180,6 +181,22 @@ export function saveProcedure(model: OrgModel, object: string, event: SaveEvent)
         writes: flowWrites(model, flow),
         notes: [...async],
       });
+    }
+  }
+
+  // Deleting a parent deletes the children that depend on it (master-detail, cascading lookups).
+  if (event === "delete") {
+    for (const child of model.objects.values()) {
+      for (const field of child.fields.values()) {
+        if (!field.cascadeDelete || !field.referenceTo.some((r) => key(r) === k)) continue;
+        steps.push({
+          phase: "cascade-delete",
+          phaseLabel: PHASE_LABELS["cascade-delete"],
+          automation: { kind: "CascadeDelete", name: child.name, file: field.file, phase: "cascade-delete" },
+          writes: [{ object: child.name, op: "delete", via: `${field.fullName} (cascade delete)`, confidence: "high" }],
+          notes: [`${child.name} records whose ${field.name} points at the deleted record are deleted too`],
+        });
+      }
     }
   }
 
