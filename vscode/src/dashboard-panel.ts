@@ -28,6 +28,7 @@ export interface DashboardSource {
 /** Actions the dashboard's buttons run, as commands of the extension. */
 export const DASHBOARD_ACTIONS = {
   analyze: "sfPreflight.analyze",
+  review: "sfPreflight.showReview",
   graph: "sfPreflight.showGraph",
   report: "sfPreflight.showReport",
   tests: "sfPreflight.generateTests",

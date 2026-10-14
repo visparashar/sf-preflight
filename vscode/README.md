@@ -49,6 +49,9 @@ Nothing to configure, and no org login needed.
   collisions, access and sharing, broken references, Agentforce, integrations, code and automation
   load) with what each means, where the risk sits, and a trend of findings over the branch's recent
   analyses. Click a factor to list its findings. Open it from the status bar or the dashboard button.
+- **Review tab**: a wide editor tab with every finding, its checked fix as a diff, and what runs when its
+  object is saved. Apply one fix, or all the safe ones at once; accept a finding as known; filter by severity
+  or risk factor. Open it from the sidebar's checklist button or the dashboard.
 - **Status bar**: high and medium findings at a glance; click it for the risk dashboard.
 - **Analyze on change**: saving Salesforce metadata, switching branches, pulling or retrieving
   re-runs the analysis a moment later, in the background, one run per project at a time.
@@ -59,6 +62,7 @@ Commands (`sf-preflight:` in the Command Palette):
 |---|---|
 | Analyze changes | Run the analysis now |
 | Show blast-radius graph | The change and what it sets off, as a graph beside your code |
+| Review findings and fixes | A wide tab: findings, the checked fix as a diff, and the save order of the object |
 | Show risk dashboard | Risk factors, where the risk sits and the trend over your recent analyses |
 | Open report in the web viewer | Save the analysis as `preflight.json` and open the [report viewer](https://sf-preflight-web.vercel.app/) to share it |
 | Compare with branch… | Choose what your changes are compared with |

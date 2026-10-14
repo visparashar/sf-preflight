@@ -143,7 +143,7 @@ const vscode = {
   TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
   ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   ProgressLocation: { Notification: 15 },
-  ViewColumn: { One: 1, Beside: -2 },
+  ViewColumn: { Active: -1, One: 1, Beside: -2 },
   CodeActionKind: { QuickFix: "quickfix" },
   CodeAction: class {
     constructor(title, kind) {

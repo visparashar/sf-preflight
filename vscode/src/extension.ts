@@ -15,6 +15,7 @@ import { addToHistory, type HistoryEntry, historyEntryOf, readHistory } from "./
 import { DashboardPanel, type DashboardSource } from "./dashboard-panel.js";
 import { GraphPanel, type GraphSource } from "./graph-panel.js";
 import { isMetadataFile, locate, problemsOf, RULES_URL, type Span, statusOf, type TreeNode, treeOf } from "./model.js";
+import { ReviewPanel, type ReviewSource } from "./review-panel.js";
 import { checkForExtensionUpdate } from "./updateCheck.js";
 import type { WorkerRequest } from "./worker.js";
 import { WorkerPool } from "./workerPool.js";
@@ -334,6 +335,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     tree.refresh();
     GraphPanel.refresh();
     DashboardPanel.refresh();
+    ReviewPanel.refresh();
   }
 
   // The dashboard's trend: recent analyses per project and branch, kept in VS Code's storage for
@@ -588,6 +590,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return p.fixes.promise;
   };
 
+  /** Apply checked fixes in one edit; refused if any file changed since its fix was checked. */
+  const applyFixes = async (dir: string, fixes: Fix[]): Promise<void> => {
+    const p = projects.get(dir) ?? [...projects.values()].find((x) => x.dir === dir);
+    if (!p || !fixes.length) return;
+    try {
+      const edit = new vscode.WorkspaceEdit();
+      for (const fix of fixes) {
+        for (const e of fix.edits) {
+          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(p.dir, e.file)));
+          const text = doc.getText();
+          if (text !== e.before) {
+            void vscode.window.showWarningMessage(
+              `sf-preflight: ${e.file} changed since this fix was checked. Analyzing again for a fresh one.`,
+            );
+            void analyze(p);
+            return;
+          }
+          // Undo and review fixes open VS Code's preview, so the diff is read before it lands.
+          edit.replace(doc.uri, new vscode.Range(doc.positionAt(0), doc.positionAt(text.length)), e.after, {
+            needsConfirmation: fix.kind !== "safe",
+            label: fix.label,
+          });
+        }
+      }
+      if (!(await vscode.workspace.applyEdit(edit))) return;
+      if (fixes.length > 1) void vscode.window.showInformationMessage(`sf-preflight: applied ${fixes.length} fixes.`);
+      for (const fix of fixes) if (fix.note) void vscode.window.showInformationMessage(`sf-preflight: ${fix.note}`);
+      // Unsaved edits are analyzed as typed; analyze now in case that is turned off.
+      void analyze(p);
+    } catch (err) {
+      void vscode.window.showErrorMessage(`sf-preflight: ${(err as Error).message}`);
+    }
+  };
+
   // Quick fixes on sf-preflight's problems: open the other files involved, generate the tests that
   // exercise the change, or accept a finding about the org's state as known (the baseline).
   context.subscriptions.push(
@@ -649,35 +685,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       },
       { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
     ),
-    vscode.commands.registerCommand("sfPreflight.applyFix", async (dir: string, fix: Fix) => {
-      const p = projects.get(dir) ?? [...projects.values()].find((x) => x.dir === dir);
-      if (!p) return;
-      try {
-        const edit = new vscode.WorkspaceEdit();
-        for (const e of fix.edits) {
-          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(p.dir, e.file)));
-          const text = doc.getText();
-          if (text !== e.before) {
-            void vscode.window.showWarningMessage(
-              `sf-preflight: ${e.file} changed since this fix was checked. Analyzing again for a fresh one.`,
-            );
-            void analyze(p);
-            return;
-          }
-          // Undo and review fixes open VS Code's preview, so the diff is read before it lands.
-          edit.replace(doc.uri, new vscode.Range(doc.positionAt(0), doc.positionAt(text.length)), e.after, {
-            needsConfirmation: fix.kind !== "safe",
-            label: fix.label,
-          });
-        }
-        if (!(await vscode.workspace.applyEdit(edit))) return;
-        if (fix.note) void vscode.window.showInformationMessage(`sf-preflight: ${fix.note}`);
-        // Unsaved edits are analyzed as typed; analyze now in case that is turned off.
-        void analyze(p);
-      } catch (err) {
-        void vscode.window.showErrorMessage(`sf-preflight: ${(err as Error).message}`);
-      }
-    }),
+    vscode.commands.registerCommand("sfPreflight.applyFix", (dir: string, fix: Fix) => applyFixes(dir, [fix])),
+    vscode.commands.registerCommand("sfPreflight.applyFixes", (dir: string, fixes: Fix[]) => applyFixes(dir, fixes)),
     vscode.commands.registerCommand("sfPreflight.acceptFinding", async (file: string, rule: string, title: string) => {
       const p = projectOf(file);
       const finding = p?.result?.findings.find((f) => f.rule === rule && f.title === title);
@@ -814,6 +823,44 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           );
         };
         DashboardPanel.show(context.extensionUri, source, () => projects.size > 1);
+        if (!p.result && !p.inflight) await analyze(p);
+      }),
+    ),
+
+    vscode.commands.registerCommand(
+      "sfPreflight.showReview",
+      guarded(async () => {
+        const p = await pickProject();
+        if (!p) {
+          void vscode.window.showInformationMessage("sf-preflight: no sfdx-project.json in this workspace.");
+          return;
+        }
+        const dir = p.dir;
+        const source = (): ReviewSource | undefined => {
+          const q = projects.get(dir);
+          return (
+            q && {
+              dir,
+              label: q.label,
+              result: q.result,
+              failOn: q.failOn,
+              branch: q.branch,
+              error: q.error,
+              busy: Boolean(q.inflight),
+              fixes: () => fixesOf(q),
+              procedure: async (object, event) =>
+                (
+                  await runWorker<{ procedure: SaveProcedure }>(context, {
+                    kind: "explain",
+                    projectDir: q.dir,
+                    object,
+                    event,
+                  })
+                ).procedure,
+            }
+          );
+        };
+        ReviewPanel.show(context.extensionUri, source, () => projects.size > 1);
         if (!p.result && !p.inflight) await analyze(p);
       }),
     ),
