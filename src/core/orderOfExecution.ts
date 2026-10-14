@@ -58,6 +58,7 @@ export function saveProcedure(model: OrgModel, object: string, event: SaveEvent)
     // Before-save flows change the record in memory; their $Record "updates" are not DML.
     const writes = flowWrites(model, flow).filter((w) => !w.selfUpdate);
     const notes = flow.trigger!.entryFields.length ? [`entry criteria on ${flow.trigger!.entryFields.join(", ")}`] : [];
+    if (flow.fieldSets.length) notes.push(`sets ${flow.fieldSets.join(", ")}`);
     steps.push({
       phase: "before-flow",
       phaseLabel: PHASE_LABELS["before-flow"],

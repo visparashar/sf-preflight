@@ -78,6 +78,21 @@ describe("parseFlow", () => {
   it("parses before-save flows", () => {
     const flow = parseFlow(read("flows/Opportunity_Set_Defaults.flow-meta.xml"), "Opportunity_Set_Defaults", "f");
     expect(flow.trigger).toMatchObject({ timing: "before", events: ["insert"] });
+    // "Update Records" on $Record in a before-save flow sets fields in memory.
+    expect(flow.fieldSets).toEqual(["Probability"]);
+  });
+
+  it("reads the fields a before-save flow sets with Assignment elements, and none for after-save flows", () => {
+    const flow = (type: string, set: string) =>
+      parseFlow(
+        `<?xml version="1.0"?><Flow xmlns="http://soap.sforce.com/2006/04/metadata"><status>Active</status>
+        <assignments><name>Set</name><assignmentItems><assignToReference>$Record.${set}</assignToReference><operator>Assign</operator><value><stringValue>x</stringValue></value></assignmentItems><assignmentItems><assignToReference>myVar</assignToReference><operator>Assign</operator><value><stringValue>y</stringValue></value></assignmentItems></assignments>
+        <start><object>Case</object><recordTriggerType>CreateAndUpdate</recordTriggerType><triggerType>${type}</triggerType></start></Flow>`,
+        "F",
+        "f",
+      );
+    expect(flow("RecordBeforeSave", "Status").fieldSets).toEqual(["Status"]);
+    expect(flow("RecordAfterSave", "Status").fieldSets).toEqual([]);
   });
 
   it("collects field references from filters, assignments and $Record", () => {

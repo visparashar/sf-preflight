@@ -36,7 +36,7 @@ AI-authored — before it ships:
 
 - [ ] Process Builder and legacy workflow rule parsing
 - [ ] Record-triggered flow trigger order (`triggerOrder`) within a phase
-- [ ] Before-save flow field assignments as field-level writes
+- [x] Before-save flow field assignments as field-level writes
 - [x] Apex: `Trigger.newMap` handlers and platform events (`EventBus.publish`)
 - [ ] Apex: detect ignored `Database.SaveResult` / `allOrNone=false` failures
 - [ ] Master-detail cascade delete edges
