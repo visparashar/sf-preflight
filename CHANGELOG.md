@@ -7,8 +7,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
+## [0.13.0] - 2026-10-14
 
+### Added
 
 - **Legacy workflow rules**: `*.workflow-meta.xml` is parsed into its rules, with the fields their criteria,
   field updates and email alerts use. Active rules appear in the save-order explanation after the after-save
@@ -20,7 +21,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to "delete the lookup record's children"), so the save-order explanation and the cascade now run the children's
   delete triggers and flows, and their own children in turn. A change that deletes records reaches that automation,
   and its findings (DML or SOQL in a loop, cycles) are reported.
-
 - **Flow trigger order**: record-triggered flows on one object run in Salesforce's order in the save-order
   explanation: trigger orders 1 to 1000 first (ties by API name), then flows without one, then 1001 to 2000. Each
   flow's step says its order, or that it has none and runs by creation date (the project doesn't have creation
@@ -547,7 +547,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/visparashar/sf-preflight/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/visparashar/sf-preflight/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/visparashar/sf-preflight/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/visparashar/sf-preflight/compare/v0.10.0...v0.10.1
