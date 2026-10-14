@@ -109,6 +109,13 @@ export const RULES: RuleInfo[] = [
     help: "The deployment fails, or the column, filter or merge field breaks, unless the field already exists in the target org. Add the field to the change or fix the name.",
   },
   {
+    id: "ignored-save-result",
+    name: "IgnoredSaveResult",
+    defaultSeverity: "medium",
+    summary: "Apex saves with allOrNone=false (partial success) and never reads which records failed.",
+    help: "Records that fail are skipped without an error, so data silently goes missing. Read the result (isSuccess / getErrors) and log, retry or surface the failures, or drop the false so the save fails loudly.",
+  },
+  {
     id: "after-save-self-update",
     name: "AfterSaveSelfUpdate",
     defaultSeverity: "medium",

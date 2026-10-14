@@ -42,6 +42,7 @@ export const CONDITION_RULES: ReadonlySet<string> = new Set([
   "automation-density",
   "multiple-triggers",
   "dml-or-soql-in-loop",
+  "ignored-save-result",
   "permission-escalation",
   "permission-system",
   "permission-delete",

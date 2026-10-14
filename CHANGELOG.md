@@ -19,6 +19,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Recursion cycles say where to break them**: the finding names the flows to limit with entry criteria
   (`$Record__Prior`) and tells Apex to guard with a static `Set<Id>` of processed records, not a static Boolean (which
   also skips the next 200-record chunk of the same transaction).
+- **New finding `ignored-save-result`**: Apex that saves with `allOrNone=false` (`Database.update(records, false)`
+  and the other save methods) and throws the result away, or keeps it in a variable nothing reads, so records that
+  failed are silently skipped. Medium in changed Apex, low in the blast radius; test classes are skipped.
 
 ## [0.12.0] - 2026-10-13
 

@@ -38,7 +38,7 @@ AI-authored — before it ships:
 - [ ] Record-triggered flow trigger order (`triggerOrder`) within a phase
 - [x] Before-save flow field assignments as field-level writes
 - [x] Apex: `Trigger.newMap` handlers and platform events (`EventBus.publish`)
-- [ ] Apex: detect ignored `Database.SaveResult` / `allOrNone=false` failures
+- [x] Apex: detect ignored `Database.SaveResult` / `allOrNone=false` failures
 - [ ] Master-detail cascade delete edges
 - [x] Configurable rule severities and ignores (`.preflight.json`)
 - [x] Performance pass on large orgs (parse cache, parallel parsing; see the README's Performance section)

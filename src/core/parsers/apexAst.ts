@@ -14,6 +14,7 @@ import {
   DotExpressionContext,
   DoWhileStatementContext,
   EnhancedForControlContext,
+  ExpressionStatementContext,
   FieldDeclarationContext,
   FieldNameContext,
   FormalParameterContext,
@@ -40,6 +41,7 @@ import {
   UndeleteStatementContext,
   UpdateStatementContext,
   UpsertStatementContext,
+  VariableDeclaratorContext,
   WhileStatementContext,
 } from "@apexdevtools/apex-parser";
 import { looksLikeSObject, SYSTEM_CLASSES } from "../standardObjects.js";
@@ -51,6 +53,7 @@ import type {
   DmlOp,
   LoopIssue,
   SaveEvent,
+  SaveResultIssue,
   Timing,
   Write,
 } from "../types.js";
@@ -145,6 +148,7 @@ class Analyzer {
   private readonly reads: string[] = [];
   private readonly classRefs = new Set<string>();
   private readonly loopIssues: LoopIssue[] = [];
+  private readonly saveIssues: SaveResultIssue[] = [];
   private readonly calls: ApexCall[] = [];
   private readonly methods = new Map<string, ApexMethod>();
   private readonly fieldRefs: string[] = [];
@@ -205,6 +209,7 @@ class Analyzer {
       reads: uniq(this.reads),
       classRefs: [...this.classRefs].filter((c) => c.toLowerCase() !== this.currentClass.toLowerCase()),
       loopIssues: uniqBy(this.loopIssues, (l) => `${l.kind}|${l.line}|${l.via ?? ""}`).sort((a, b) => a.line - b.line),
+      saveIssues: uniqBy(this.saveIssues, (s) => `${s.line}|${s.op}`).sort((a, b) => a.line - b.line),
       unresolvedDml: this.unresolvedDml,
       calls: this.calls,
       methods: [...this.methods.values()],
@@ -384,6 +389,7 @@ class Analyzer {
       const firstArg = call.expressionList()?.expression(0) as unknown as Node | undefined;
       if (/^database$/i.test(leftText) && DATABASE_DML.test(method)) {
         const op = method.toLowerCase().replace(/(immediate|async)$/, "") as DmlOp | "merge";
+        this.saveResult(n, call.expressionList(), method);
         this.dml(op === "merge" ? "update" : op, firstArg, n as unknown as Node);
         return;
       }
@@ -414,6 +420,47 @@ class Analyzer {
         this.fieldRefs.push(`*.${field}`);
       }
     }
+  }
+
+  /**
+   * `Database.update(records, false)` saves what it can and reports the rest in its result. If the
+   * result is thrown away, or kept in a variable nothing reads, failed records are silently skipped.
+   */
+  private saveResult(call: DotExpressionContext, args: { expression_list(): unknown[] } | undefined, method: string) {
+    if (/^merge$/i.test(method)) return;
+    const exprs = (args?.expression_list() ?? []) as Node[];
+    if (!exprs.slice(1).some((e) => /^false$/i.test(e.getText()))) return;
+    const line = call.start?.line ?? 1;
+    const parent = (call as unknown as Node).parentCtx;
+    let kind: SaveResultIssue["kind"] | undefined;
+    if (parent instanceof ExpressionStatementContext) kind = "discarded";
+    else {
+      let name: string | undefined;
+      let assign: Node | undefined;
+      if (parent instanceof VariableDeclaratorContext) name = parent.id().getText();
+      else if (parent instanceof AssignExpressionContext) {
+        const left = parent.expression(0) as unknown as Node;
+        if (left instanceof PrimaryExpressionContext && left.primary() instanceof IdPrimaryContext) {
+          name = left.getText();
+          assign = left;
+        }
+      }
+      if (name) {
+        const method = closest(
+          call as unknown as Node,
+          (p) => p instanceof MethodDeclarationContext || p instanceof ConstructorDeclarationContext,
+        );
+        let uses = 0;
+        if (method)
+          walk(method, (n) => {
+            if (n instanceof IdPrimaryContext && lc(n.id().getText()) === lc(name!)) uses++;
+            return true;
+          });
+        // An assignment's own left side is not a use.
+        if (method && uses <= (assign ? 1 : 0)) kind = "unread";
+      }
+    }
+    if (kind) this.saveIssues.push({ op: method.toLowerCase(), line, snippet: this.snippet(line), kind });
   }
 
   private callTarget(left: Node): string | undefined {
