@@ -94,6 +94,7 @@ import type {
   Reference,
   SaveEvent,
   SaveProcedure,
+  SaveResultIssue,
   Severity,
   SuggestedTest,
 } from "./types.js";
@@ -1114,14 +1115,24 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   }
 
   // DML/SOQL inside loops in changed or impacted Apex.
-  const apexInScope = new Map<string, { name: string; file: string; issues: LoopIssue[]; changed: boolean }>();
+  const apexInScope = new Map<
+    string,
+    { name: string; file: string; issues: LoopIssue[]; saves: SaveResultIssue[]; changed: boolean }
+  >();
   const addApex = (kind: "class" | "trigger", name: string) => {
     const def = kind === "class" ? model.classes.get(key(name)) : model.triggers.get(key(name));
-    if (!def?.loopIssues.length) return;
+    const saves = def && !("isTest" in def && def.isTest) ? (def.saveIssues ?? []) : [];
+    if (!def || !(def.loopIssues.length || saves.length)) return;
     const k = `${kind}:${key(name)}`;
     const changed = changedAutomation.has(k) || changedFiles.has(def.file);
     const prev = apexInScope.get(k);
-    apexInScope.set(k, { name: def.name, file: def.file, issues: def.loopIssues, changed: changed || !!prev?.changed });
+    apexInScope.set(k, {
+      name: def.name,
+      file: def.file,
+      issues: def.loopIssues,
+      saves,
+      changed: changed || !!prev?.changed,
+    });
   };
   for (const k of changedAutomation) {
     const [kind, name] = k.split(":") as ["class" | "trigger" | "flow", string];
@@ -1136,6 +1147,22 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     }
   }
   for (const a of apexInScope.values()) {
+    if (a.saves.length) {
+      addFinding({
+        rule: "ignored-save-result",
+        severity: a.changed ? "medium" : "low",
+        title: `${a.saves.length} partial-success save(s) in ${a.name} ignore failed records${a.changed ? " (changed)" : " (in blast radius)"}`,
+        detail: a.saves
+          .map(
+            (i) =>
+              `line ${i.line} ${i.op} ${i.kind === "discarded" ? "result thrown away" : "result never read"}: ${i.snippet}`,
+          )
+          .join("; "),
+        files: [a.file],
+        line: a.saves[0]?.line,
+      });
+    }
+    if (!a.issues.length) continue;
     addFinding({
       rule: "dml-or-soql-in-loop",
       severity: a.changed ? "high" : "medium",

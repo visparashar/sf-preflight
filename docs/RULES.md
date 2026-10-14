@@ -20,6 +20,7 @@ that is only inside the blast radius).
 | [`integration-allowlist-removed`](#integration-allowlist-removed) | Medium | A remote site setting or CSP trusted site no longer allows a host that code still calls. |
 | [`connected-app-access`](#connected-app-access) | Medium | A connected app requests more OAuth scopes or accepts new callback URLs. |
 | [`missing-field-reference`](#missing-field-reference) | Medium | A changed report, report type, list view, email template, quick action, compact layout or field set names a custom field the project's object lacks. |
+| [`ignored-save-result`](#ignored-save-result) | Medium | Apex saves with allOrNone=false (partial success) and never reads which records failed. |
 | [`after-save-self-update`](#after-save-self-update) | Medium | An after-save flow updates its own triggering record. |
 | [`automation-density`](#automation-density) | Medium | Three or more flows/triggers run on the same object and event. |
 | [`multiple-triggers`](#multiple-triggers) | Medium | More than one Apex trigger on the same object. |
@@ -168,6 +169,14 @@ Full and refresh-token scopes give broad, long-lived access; callback URLs recei
 A changed report, report type, list view, email template, quick action, compact layout or field set names a custom field the project's object lacks.
 
 The deployment fails, or the column, filter or merge field breaks, unless the field already exists in the target org. Add the field to the change or fix the name.
+
+## ignored-save-result
+
+**IgnoredSaveResult** · default severity: Medium
+
+Apex saves with allOrNone=false (partial success) and never reads which records failed.
+
+Records that fail are skipped without an error, so data silently goes missing. Read the result (isSuccess / getErrors) and log, retry or surface the failures, or drop the false so the save fails loudly.
 
 ## after-save-self-update
 

@@ -161,6 +161,15 @@ export interface FlowDef {
   file: string;
 }
 
+/** A partial-success save (`Database.update(records, false)`) whose per-record failures nobody reads. */
+export interface SaveResultIssue {
+  op: string;
+  line: number;
+  snippet: string;
+  /** The result is thrown away, or kept in a variable that is never used. */
+  kind: "discarded" | "unread";
+}
+
 export interface LoopIssue {
   kind: "soql-in-loop" | "dml-in-loop";
   line: number;
@@ -199,6 +208,8 @@ export interface ApexAnalysis {
   reads: string[];
   classRefs: string[];
   loopIssues: LoopIssue[];
+  /** AST only: partial-success saves whose failures are ignored. */
+  saveIssues?: SaveResultIssue[];
   unresolvedDml: number;
   /** Source with comments and string contents blanked out (same length/lines as original). */
   stripped: string;

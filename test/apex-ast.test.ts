@@ -105,6 +105,36 @@ describe("AST: loops", () => {
   });
 });
 
+describe("AST: ignored save results", () => {
+  const issues = (body: string) =>
+    parseClass(`public class S { void f(List<Account> accs, List<Id> ids) { ${body} } }`).saveIssues?.map(
+      (i) => `${i.op}:${i.kind}`,
+    );
+
+  it("flags partial-success saves whose result is thrown away or never read", () => {
+    expect(issues("Database.update(accs, false);")).toEqual(["update:discarded"]);
+    expect(issues("Database.delete(ids, false);")).toEqual(["delete:discarded"]);
+    expect(issues("Database.upsert(accs, Account.Id, false);")).toEqual(["upsert:discarded"]);
+    expect(issues("List<Database.SaveResult> r = Database.insert(accs, false);")).toEqual(["insert:unread"]);
+    expect(issues("Database.SaveResult[] r; r = Database.update(accs, false);")).toEqual(["update:unread"]);
+  });
+
+  it("does not flag saves that stop on failure, or whose result is used", () => {
+    expect(issues("Database.update(accs);")).toEqual([]);
+    expect(issues("Database.update(accs, true);")).toEqual([]);
+    expect(issues("update accs;")).toEqual([]);
+    expect(
+      issues(
+        "List<Database.SaveResult> r = Database.update(accs, false); for (Database.SaveResult s : r) { s.isSuccess(); }",
+      ),
+    ).toEqual([]);
+    expect(issues("Boolean ok = Database.update(accs, false)[0].isSuccess();")).toEqual([]);
+    expect(
+      issues("Database.SaveResult[] r; r = Database.update(accs, false); if (r[0].isSuccess()) { return; }"),
+    ).toEqual([]);
+  });
+});
+
 describe("AST: triggers, annotations and field references", () => {
   it("parses trigger headers and marks Trigger.new updates as self updates", () => {
     const r = analyzeApexAst(
