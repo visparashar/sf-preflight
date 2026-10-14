@@ -133,7 +133,8 @@ export const RISK_FACTORS: RiskFactor[] = [
   {
     id: "load",
     label: "Code and automation load",
-    meaning: "DML or SOQL in loops, saves that ignore failed records, crowded objects, legacy and inactive automation, and automation only in the org.",
+    meaning:
+      "DML or SOQL in loops, saves that ignore failed records, crowded objects, legacy and inactive automation, and automation only in the org.",
     rules: [
       "dml-or-soql-in-loop",
       "ignored-save-result",
