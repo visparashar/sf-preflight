@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-14
+
+Brings the analysis of sf-preflight 0.13.0 into the editor:
+
+- **Legacy workflow rules** are parsed: where they run in the save order, the fields they read and write, and
+  changes to a rule are reported.
+- **Cascade deletes** (master-detail and cascade-delete lookups) appear in the save order of a delete.
+- **Flow trigger order**: record-triggered flows on one object are placed in their real run order.
+- **Before-save flows** show the fields they set, which feeds the validation-rule and recursion findings.
+- New finding `ignored-save-result`: `Database.insert/update/...` with `allOrNone=false` whose result is never
+  checked.
+- Clearer advice on recursion cycles.
+
 ## [0.6.0] - 2026-10-13
 
 - **Fix it**: when a problem has a checked fix (see `preflight fix`), it is the first quick fix in the light
