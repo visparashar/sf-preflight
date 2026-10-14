@@ -2,7 +2,7 @@
   "name": "sf-preflight-vscode",
   "displayName": "sf-preflight: Salesforce change impact",
   "description": "See what a Salesforce change sets off before it ships: flows, triggers, validation rules, roll-ups, permissions and Agentforce actions, with findings in the Problems panel and the blast radius beside your code.",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "visparashar",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -100,6 +100,12 @@
         "icon": "$(type-hierarchy)"
       },
       {
+        "command": "sfPreflight.showReview",
+        "title": "Review findings and fixes",
+        "category": "sf-preflight",
+        "icon": "$(checklist)"
+      },
+      {
         "command": "sfPreflight.showDashboard",
         "title": "Show risk dashboard",
         "category": "sf-preflight",
@@ -131,34 +137,39 @@
     "menus": {
       "view/title": [
         {
-          "command": "sfPreflight.showDashboard",
+          "command": "sfPreflight.showReview",
           "when": "view == sfPreflight.blastRadius",
           "group": "navigation@0"
         },
         {
-          "command": "sfPreflight.analyze",
-          "when": "view == sfPreflight.blastRadius",
-          "group": "navigation@2"
-        },
-        {
-          "command": "sfPreflight.showGraph",
+          "command": "sfPreflight.showDashboard",
           "when": "view == sfPreflight.blastRadius",
           "group": "navigation@1"
         },
         {
-          "command": "sfPreflight.chooseBase",
+          "command": "sfPreflight.analyze",
           "when": "view == sfPreflight.blastRadius",
           "group": "navigation@3"
         },
         {
-          "command": "sfPreflight.showReport",
+          "command": "sfPreflight.showGraph",
+          "when": "view == sfPreflight.blastRadius",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sfPreflight.chooseBase",
           "when": "view == sfPreflight.blastRadius",
           "group": "navigation@4"
         },
         {
-          "command": "sfPreflight.generateTests",
+          "command": "sfPreflight.showReport",
           "when": "view == sfPreflight.blastRadius",
           "group": "navigation@5"
+        },
+        {
+          "command": "sfPreflight.generateTests",
+          "when": "view == sfPreflight.blastRadius",
+          "group": "navigation@6"
         }
       ]
     },

@@ -6,6 +6,8 @@
 !media/graph.css
 !media/dashboard.js
 !media/dashboard.css
+!media/review.js
+!media/review.css
 !package.json
 !README.md
 !CHANGELOG.md

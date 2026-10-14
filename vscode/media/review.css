@@ -1,0 +1,432 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* The Review tab. Text uses the editor's theme colours; severity colours mark identity only. */
+body {
+  --bg: var(--vscode-editor-background, #0d1117);
+  --fg: var(--vscode-editor-foreground, #e6e9ed);
+  --muted: var(--vscode-descriptionForeground, #8b949e);
+  --line: color-mix(in srgb, var(--fg) 16%, transparent);
+  --tile: color-mix(in srgb, var(--bg) 90%, var(--fg) 4%);
+  --sel: var(--vscode-list-activeSelectionBackground, color-mix(in srgb, var(--fg) 14%, transparent));
+  --focus: var(--vscode-focusBorder, #3dd6b5);
+  --accent: var(--vscode-button-background, #0e639c);
+  --accent-fg: var(--vscode-button-foreground, #fff);
+  --t-high: #ff6b5b;
+  --t-medium: #f5b041;
+  --t-low: #3dd6b5;
+  --c-high: #b8352c;
+  --c-medium: #b88c16;
+  --c-low: #4a8fe0;
+  --c-info: color-mix(in srgb, var(--fg) 35%, transparent);
+  --add: color-mix(in srgb, #2ea043 24%, transparent);
+  --del: color-mix(in srgb, #f85149 24%, transparent);
+  --mono: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
+  --sans: var(--vscode-font-family, system-ui, sans-serif);
+}
+body.vscode-light {
+  --t-high: #c4302a;
+  --t-medium: #9a6200;
+  --t-low: #0b8f74;
+  --c-high: #c8352a;
+  --c-medium: #e0a100;
+  --c-low: #2f68a8;
+}
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --line: var(--fg);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 11.5px;
+}
+.pad {
+  padding: 16px;
+}
+.pad-x {
+  padding: 0 12px;
+  margin: 4px 0;
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.diff:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* ---- header */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: baseline;
+}
+.risk {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.risk.high {
+  color: var(--t-high);
+}
+.risk.medium {
+  color: var(--t-medium);
+}
+.risk.low {
+  color: var(--t-low);
+}
+.counts span.zero {
+  color: var(--muted);
+}
+.counts span + span {
+  margin-left: 10px;
+}
+.gate.pass {
+  color: var(--t-low);
+}
+.gate.fail {
+  color: var(--t-high);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 10px 0 0;
+}
+.bar .actions {
+  margin: 0;
+}
+.actions button,
+.empty-state button {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+.actions button:hover {
+  background: var(--sel);
+}
+.actions button.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: transparent;
+}
+.actions button.primary:hover {
+  background: var(--vscode-button-hoverBackground, var(--accent));
+}
+button.link {
+  border: 0;
+  background: none;
+  color: var(--vscode-textLink-foreground, #3794ff);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* ---- severity marks */
+.sq {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+  vertical-align: baseline;
+}
+.sq.high {
+  background: var(--c-high);
+}
+.sq.medium {
+  background: var(--c-medium);
+}
+.sq.low {
+  background: var(--c-low);
+}
+.sq.info {
+  background: var(--c-info);
+}
+
+/* ---- the three columns */
+.cols {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(340px, 1.5fr) minmax(260px, 1fr);
+}
+.cols > * {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+}
+.cols > *:last-child {
+  border-right: 0;
+}
+@media (max-width: 1000px) {
+  /* Narrow: the list on top, the finding below, the save order last. */
+  #app {
+    height: auto;
+  }
+  .cols {
+    display: block;
+  }
+  .cols > * {
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+/* ---- findings list */
+.filters {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.filters input,
+.filters select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  background: var(--vscode-input-background, var(--tile));
+  border: 1px solid var(--vscode-input-border, var(--line));
+  border-radius: 3px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chip {
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+.chip.on {
+  background: var(--sel);
+  border-color: var(--fg);
+}
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.row .sq {
+  margin-top: 5px;
+}
+.row:hover,
+.row.on {
+  background: var(--sel);
+}
+.row-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.row-title {
+  overflow-wrap: anywhere;
+}
+.row-sub {
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge {
+  margin-left: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.row .badge {
+  margin: 2px 0 0;
+}
+.badge.safe {
+  border-color: var(--t-low);
+  color: var(--t-low);
+}
+.badge.undo,
+.badge.review {
+  border-color: var(--t-medium);
+  color: var(--t-medium);
+}
+
+/* ---- the selected finding */
+.detail,
+.order {
+  padding: 12px 16px;
+}
+.detail h2,
+.order h2 {
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+.detail h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.meta {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.files {
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.fix {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.note {
+  padding: 6px 10px;
+  border-left: 3px solid var(--c-medium);
+  background: var(--tile);
+}
+.diff {
+  margin: 8px 0;
+  padding: 6px 0;
+  max-height: 340px;
+  overflow: auto;
+  background: var(--tile);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+.dl {
+  display: inline-block;
+  min-width: 100%;
+  padding: 0 10px;
+  box-sizing: border-box;
+}
+.dl.add {
+  background: var(--add);
+}
+.dl.del {
+  background: var(--del);
+}
+.dl.hunk {
+  color: var(--muted);
+}
+.dl.file {
+  font-weight: 600;
+}
+
+/* ---- the save order */
+.order p {
+  margin: 4px 0;
+}
+.steps {
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.steps li {
+  position: relative;
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px 6px 34px;
+  border-left: 2px solid var(--line);
+  counter-increment: step;
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--tile);
+  border: 1px solid var(--line);
+  text-align: center;
+  line-height: 16px;
+  font-size: 11px;
+}
+.steps li.hit {
+  border-left-color: var(--c-medium);
+  background: var(--sel);
+}
+.steps .phase {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.steps .name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.steps .writes {
+  font-size: 12px;
+}
+.steps .here {
+  color: var(--t-medium);
+  font-size: 11.5px;
+}
+.empty-state {
+  margin: 0;
+}

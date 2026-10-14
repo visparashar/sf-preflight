@@ -209,11 +209,67 @@ test("shows the risk dashboard, and opens only the project's files from it", asy
   assert.equal(vscode.__state.panels.at(-1), panel);
 });
 
+test("shows the review tab: findings first, then fixes, and only the project's files and its own actions", async () => {
+  await vscode.__state.commands.get("sfPreflight.showReview")();
+  const panel = vscode.__state.panels.at(-1);
+  assert.equal(panel.viewType, "sfPreflight.review");
+  assert.match(panel.webview.html, /media\/review\.js">/);
+  assert.match(panel.webview.html, /default-src 'none'/);
+
+  // Nothing is sent until the page is ready; then the findings, and the checked fixes after them.
+  assert.equal(panel.posted.length, 0);
+  await panel.receive({ type: "ready" });
+  await until(() => panel.posted.some((m) => m.type === "review" && m.model && !m.model.fixesPending), "the fixes");
+  const first = panel.posted.find((m) => m.type === "review" && m.model);
+  assert.equal(first.model.fixesPending, true);
+  const msg = panel.posted.findLast((m) => m.type === "review");
+  assert.ok(msg.model.findings.length > 0);
+  assert.equal(msg.meta.branch, "main");
+  assert.ok(!JSON.stringify(panel.posted).includes(repo), "no local paths reach the webview");
+
+  // A finding opens by key; unknown keys and malformed messages do nothing.
+  const finding = msg.model.findings.find((f) => f.files.length);
+  vscode.__state.opened = [];
+  await panel.receive({ type: "open", key: finding.key });
+  assert.equal(vscode.__state.opened.length, 1);
+  assert.ok(vscode.__state.opened[0].startsWith(repo));
+  for (const bad of [{ type: "open", key: 9999 }, { type: "open", key: "0" }, { type: "open", key: -1 }, null, "x"])
+    await panel.receive(bad);
+  assert.equal(vscode.__state.opened.length, 1);
+
+  // Buttons run only the tab's own commands.
+  vscode.__state.executed = [];
+  await panel.receive({ type: "run", action: "graph" });
+  await panel.receive({ type: "run", action: "workbench.action.terminal.new" });
+  await panel.receive({ type: "run", action: "__proto__" });
+  assert.deepEqual(vscode.__state.executed, [["sfPreflight.showGraph"]]);
+
+  // The save order is read for an object of a finding, and for the four save events only.
+  const withObject = msg.model.findings.find((f) => f.object);
+  assert.ok(withObject, "a finding about an object");
+  {
+    const before = panel.posted.length;
+    await panel.receive({ type: "saveOrder", key: withObject.key, event: "update" });
+    await until(() => panel.posted.slice(before).some((m) => m.type === "saveOrder"), "the save order");
+    const reply = panel.posted.slice(before).find((m) => m.type === "saveOrder");
+    assert.equal(reply.key, withObject.key);
+    assert.equal(reply.order.event, "update");
+    assert.ok(Array.isArray(reply.order.steps));
+    const n = panel.posted.length;
+    await panel.receive({ type: "saveOrder", key: withObject.key, event: "drop" });
+    assert.equal(panel.posted.length, n);
+  }
+
+  // Showing it again reuses the tab.
+  await vscode.__state.commands.get("sfPreflight.showReview")();
+  assert.equal(vscode.__state.panels.at(-1), panel);
+});
+
 test("packages every file the webviews load", () => {
   const ignore = readFileSync(path.join(ext, ".vscodeignore"), "utf8").split("\n");
   const html = vscode.__state.panels.map((p) => p.webview.html).join("\n");
   const loaded = [...html.matchAll(/media\/([\w.-]+\.(?:js|css))/g)].map((m) => m[1]);
-  assert.ok(loaded.includes("graph.js") && loaded.includes("dashboard.js"));
+  assert.ok(loaded.includes("graph.js") && loaded.includes("dashboard.js") && loaded.includes("review.js"));
   for (const f of new Set(loaded)) assert.ok(ignore.includes(`!media/${f}`), `media/${f} is left out of the package`);
 });
 

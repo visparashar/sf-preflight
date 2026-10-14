@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-14
+
+The analysis of sf-preflight 0.13.0, and a Review tab:
+
+- **Legacy workflow rules** are parsed: where they run in the save order, the fields they read and write, and
+  changes to a rule are reported.
+- **Cascade deletes** (master-detail and cascade-delete lookups) appear in the save order of a delete.
+- **Flow trigger order**: record-triggered flows on one object are placed in their real run order.
+- **Before-save flows** show the fields they set, which feeds the validation-rule and recursion findings.
+- New finding `ignored-save-result`: `Database.insert/update/...` with `allOrNone=false` whose result is never
+  checked.
+- Clearer advice on recursion cycles.
+- **Review tab** (`sf-preflight: Review findings and fixes`, or the checklist button in the sidebar): a wide
+  editor tab with the findings on the left, the selected finding in the middle, and what runs when its object is
+  saved on the right. Fixes show as a diff before they are applied, **Apply safe fixes** applies every safe fix
+  that touches its own file in one edit, and a finding can be accepted as known, opened, or sent to test
+  generation from the same place. Filter by severity, risk factor or "has a fix"; arrow keys move through the
+  list. The dashboard has a **Review & fix** button.
+
 ## [0.6.0] - 2026-10-13
 
 - **Fix it**: when a problem has a checked fix (see `preflight fix`), it is the first quick fix in the light

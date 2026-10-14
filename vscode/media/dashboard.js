@@ -63,6 +63,7 @@
         "div",
         { class: "actions" },
         button("Analyze", "analyze"),
+        button("Review & fix", "review"),
         button("Graph", "graph"),
         button("Report", "report"),
         button("Generate tests", "tests"),
