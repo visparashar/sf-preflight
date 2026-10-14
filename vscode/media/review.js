@@ -452,6 +452,9 @@
   });
 
   window.addEventListener("message", (event) => {
+    const trustedOrigin = window.location.origin;
+    if (event.origin !== trustedOrigin) return;
+
     const msg = event.data;
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "review") {
