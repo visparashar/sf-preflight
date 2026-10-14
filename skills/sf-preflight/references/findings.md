@@ -5,7 +5,7 @@ don't disable a rule or edit `.preflight.json` to make a finding go away unless 
 
 | Rule | Severity | What it means | Usual fix |
 |---|---|---|---|
-| `recursion-cycle` | High | Automation writes lead back to an object already being saved in the same transaction. | Add a recursion guard (static set of processed IDs), narrow flow entry criteria to the fields that matter, or move the write to an async path. |
+| `recursion-cycle` | High | Automation writes lead back to an object already being saved in the same transaction. | Add a recursion guard (a static `Set<Id>` of processed IDs, not a static Boolean, which also skips the next 200-record chunk), narrow flow entry criteria to the fields that matter, or move the write to an async path. Run `check_fix` and the generated bulk test on the guard. |
 | `dml-or-soql-in-loop` | High | DML or SOQL inside a loop, which hits governor limits in bulk. | Collect records/IDs in the loop, query and save once outside it. |
 | `validation-rule-vs-existing-automation` | High | A new or changed validation rule applies to automation that already writes the object; those saves can now fail. | Make the automation set the required values, or exempt it in the rule's formula; add a test that runs the automation against the rule. |
 | `deleted-still-referenced` | High | A deleted field, flow or class is still used elsewhere. | Remove or update the references in the same change, or don't delete it yet. |

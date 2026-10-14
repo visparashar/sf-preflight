@@ -75,6 +75,16 @@ describe("analyze: field change", () => {
     expect(r.summary.risk).toBe("high");
   });
 
+  it("says where to break a cycle: entry criteria for flows, a Set<Id> guard (not a Boolean) for Apex", () => {
+    const details = analyzeFiles([file])
+      .findings.filter((f) => f.rule === "recursion-cycle")
+      .map((f) => f.detail)
+      .join("\n");
+    expect(details).toContain("Set<Id>");
+    expect(details).toContain("not a static Boolean");
+    expect(details).toContain("$Record__Prior");
+  });
+
   it("flags the validation rule that checks the field and automated writes it guards", () => {
     const r = analyzeFiles([file]);
     expect(rules(r)).toEqual(

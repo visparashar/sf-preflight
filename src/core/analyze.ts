@@ -910,7 +910,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   };
 
   let nodeCount = 0;
-  const cycleMap = new Map<string, { labels: string[]; files: string[] }>();
+  const cycleMap = new Map<string, { labels: string[]; files: string[]; autos: AutomationRef[] }>();
   const label = (n: { object: string; event: SaveEvent; via?: AutomationRef }) =>
     `${n.object} (${n.event})${n.via && n.via.kind !== "Change" ? ` ← ${describe(n.via)}` : ""}`;
 
@@ -956,6 +956,10 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
             cycleMap.set(signature, {
               labels: loop.map(label),
               files: uniq(loop.map((n) => n.via?.file).filter((f): f is string => !!f)),
+              autos: uniqBy(
+                loop.map((n) => n.via).filter((v): v is AutomationRef => !!v && v.kind !== "Change"),
+                (v) => `${v.kind}|${key(v.name)}`,
+              ),
             });
           }
           continue;
@@ -995,12 +999,12 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   // 3. Findings from the cascade
   // ------------------------------------------------------------------------------------
   const cycles = [...cycleMap.values()].map((c) => c.labels);
-  for (const { labels: loop, files } of cycleMap.values()) {
+  for (const { labels: loop, files, autos } of cycleMap.values()) {
     addFinding({
       rule: "recursion-cycle",
       severity: "high",
       title: `Automation cycle: ${loop.map((l) => l.split(" ")[0]).join(" → ")}`,
-      detail: `${loop.join(" → ")}. At human pace this may settle; at bulk or agent volume it can cause recursion, duplicate updates or governor-limit failures mid-batch.`,
+      detail: `${loop.join(" → ")}. At human pace this may settle; at bulk or agent volume it can cause recursion, duplicate updates or governor-limit failures mid-batch.${recursionAdvice(autos)}`,
       files,
     });
     tests.push({
@@ -1405,4 +1409,24 @@ function permissionDelta(
     }
   }
   return { findings, tests };
+}
+
+/**
+ * How to break a cycle, by what is in it. A flow can be limited by entry criteria. Apex needs a guard
+ * that remembers record ids: a static Boolean also skips the next 200-record chunk of the same
+ * transaction, which turns a recursion bug into silently unprocessed records.
+ */
+function recursionAdvice(autos: AutomationRef[]): string {
+  const flows = autos.filter((a) => a.kind === "Flow");
+  const apex = autos.filter((a) => a.kind === "ApexTrigger" || a.kind === "ApexClass");
+  const parts: string[] = [];
+  if (flows.length)
+    parts.push(
+      `Cheapest place to break it: ${flows.map((f) => f.name).join(", ")} — run it only when the fields it reads change (entry criteria with \`$Record__Prior\`), or move a same-record update to a before-save flow.`,
+    );
+  if (apex.length)
+    parts.push(
+      `In ${apex.map((a) => a.name).join(", ")}, guard with a static Set<Id> of records already processed and skip those, not a static Boolean (a Boolean also skips the next 200-record chunk of the same transaction).`,
+    );
+  return parts.length ? ` ${parts.join(" ")}` : "";
 }
