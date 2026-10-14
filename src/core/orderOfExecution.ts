@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { flowWrites, triggerWrites } from "./graph.js";
 import { activeRules, automationRef, isPlatformEvent, type SaveRuleDef } from "./saveRules.js";
-import type { OrgModel, Phase, SaveEvent, SaveProcedure, SaveStep, Write } from "./types.js";
+import type { FlowDef, OrgModel, Phase, SaveEvent, SaveProcedure, SaveStep, Write } from "./types.js";
 import { key } from "./util.js";
 
 /**
@@ -35,13 +35,29 @@ export const PHASE_LABELS: Record<Phase, string> = {
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name);
 
+/**
+ * Record-triggered flows on one object and timing run: trigger orders 1 to 1000 (ascending, ties by
+ * API name), then flows without an order (by creation date, which the project doesn't have, so by
+ * name here), then orders 1001 to 2000.
+ */
+const runRank = (f: FlowDef) => (f.trigger?.order === undefined ? 1 : f.trigger.order <= 1000 ? 0 : 2);
+export const byRunOrder = (a: FlowDef, b: FlowDef) =>
+  runRank(a) - runRank(b) || (a.trigger?.order ?? 0) - (b.trigger?.order ?? 0) || byName(a, b);
+
+/** Notes on where a flow stands among the flows that run with it. */
+function orderNotes(flow: FlowDef, group: FlowDef[]): string[] {
+  if (group.length < 2) return [];
+  if (flow.trigger?.order !== undefined) return [`trigger order ${flow.trigger.order}`];
+  return ["no trigger order: runs by creation date among the flows without one (shown here by name)"];
+}
+
 export function saveProcedure(model: OrgModel, object: string, event: SaveEvent): SaveProcedure {
   const k = key(object);
   const steps: Omit<SaveStep, "order">[] = [];
 
   const flows = [...model.flows.values()]
     .filter((f) => f.active && f.trigger && key(f.trigger.object) === k && f.trigger.events.includes(event))
-    .sort(byName);
+    .sort(byRunOrder);
   const triggers = [...model.triggers.values()].filter((t) => key(t.object) === k).sort(byName);
   const ruleStep = (phase: Phase, r: SaveRuleDef, notes: string[]) =>
     steps.push({
@@ -54,10 +70,12 @@ export function saveProcedure(model: OrgModel, object: string, event: SaveEvent)
   // Publishing a platform event: subscribers run later, in their own transaction.
   const async = isPlatformEvent(object) ? ["subscriber: runs later, in its own transaction"] : [];
 
-  for (const flow of flows.filter((f) => f.trigger!.timing === "before")) {
+  const beforeFlows = flows.filter((f) => f.trigger!.timing === "before");
+  for (const flow of beforeFlows) {
     // Before-save flows change the record in memory; their $Record "updates" are not DML.
     const writes = flowWrites(model, flow).filter((w) => !w.selfUpdate);
     const notes = flow.trigger!.entryFields.length ? [`entry criteria on ${flow.trigger!.entryFields.join(", ")}`] : [];
+    notes.push(...orderNotes(flow, beforeFlows));
     if (flow.fieldSets.length) notes.push(`sets ${flow.fieldSets.join(", ")}`);
     steps.push({
       phase: "before-flow",
@@ -115,9 +133,10 @@ export function saveProcedure(model: OrgModel, object: string, event: SaveEvent)
       ruleStep("escalation", r, ["actions run later, when the case is still open"]);
   }
 
-  for (const flow of flows.filter((f) => f.trigger!.timing === "after")) {
+  const afterFlows = flows.filter((f) => f.trigger!.timing === "after");
+  for (const flow of afterFlows) {
     const writes = flowWrites(model, flow);
-    const notes: string[] = [];
+    const notes: string[] = orderNotes(flow, afterFlows);
     if (flow.trigger!.entryFields.length) notes.push(`entry criteria on ${flow.trigger!.entryFields.join(", ")}`);
     if (writes.some((w) => w.selfUpdate)) notes.push("updates its own triggering record (re-enters the save)");
     if (flow.trigger!.hasScheduledPaths) notes.push("has scheduled paths (runs asynchronously later)");

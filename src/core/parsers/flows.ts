@@ -26,7 +26,7 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
   const status = text(body.status) ?? "Active";
   const processType = text(body.processType);
 
-  const trigger = parseTrigger(body.start as XmlNode | undefined);
+  const trigger = parseTrigger(body.start as XmlNode | undefined, text(body.triggerOrder));
 
   // --- symbol table: name -> SObject type -----------------------------------------
   const symbols = new Map<string, string>();
@@ -161,7 +161,7 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
   };
 }
 
-function parseTrigger(start: XmlNode | undefined): FlowTrigger | undefined {
+function parseTrigger(start: XmlNode | undefined, flowOrder?: string): FlowTrigger | undefined {
   if (!start) return undefined;
   const object = text(start.object);
   const triggerType = text(start.triggerType);
@@ -190,8 +190,15 @@ function parseTrigger(start: XmlNode | undefined): FlowTrigger | undefined {
     filterLogic: text(start.filterLogic)?.toLowerCase(),
     filterFormula,
     requiresChange: text(start.doesRequireRecordChangedToMeetCriteria)?.toLowerCase() === "true" || undefined,
+    order: triggerOrder(text(start.triggerOrder) ?? flowOrder),
     hasScheduledPaths: nodes(start.scheduledPaths).length > 0,
   };
+}
+
+/** The trigger order, 1 to 2000, or undefined when absent or out of range. */
+function triggerOrder(v: string | undefined): number | undefined {
+  const n = v === undefined ? Number.NaN : Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 2000 ? n : undefined;
 }
 
 /** Read a `<value>` element: stringValue, numberValue, booleanValue, dateValue or elementReference. */
