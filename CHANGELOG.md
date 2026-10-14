@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Recursion cycles say where to break them**: the finding names the flows to limit with entry criteria
+  (`$Record__Prior`) and tells Apex to guard with a static `Set<Id>` of processed records, not a static Boolean (which
+  also skips the next 200-record chunk of the same transaction).
+
 ## [0.12.0] - 2026-10-13
 
 ### Added

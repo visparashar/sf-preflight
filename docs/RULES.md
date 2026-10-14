@@ -79,7 +79,7 @@ that is only inside the blast radius).
 
 Automation writes lead back to an object already being saved in the same transaction.
 
-Cycles that settle at human pace can recurse, double-apply or hit governor limits at bulk or agent volume. Add recursion guards, narrow entry criteria, or move the write to a before-save flow.
+Cycles that settle at human pace can recurse, double-apply or hit governor limits at bulk or agent volume. Add recursion guards (a static Set<Id> of processed records, not a static Boolean, which also skips the next 200-record chunk), narrow entry criteria, or move the write to a before-save flow.
 
 ## automated-write-vs-validation-rule
 
