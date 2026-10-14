@@ -331,7 +331,6 @@ export function loadProject(
   };
 
   const agentMeta = emptyAgentMetadata();
-  let legacyWorkflow = 0;
   let processBuilders = 0;
   for (const ref of refs) {
     switch (ref.type) {
@@ -405,7 +404,6 @@ export function loadProject(
         });
         break;
       case "WorkflowRule":
-        legacyWorkflow++;
         break;
       case "AgentMetadata": {
         const file = ref.file;
@@ -460,9 +458,6 @@ export function loadProject(
     }
   }
 
-  if (legacyWorkflow) {
-    model.warnings.push(`${legacyWorkflow} legacy workflow file(s) found; workflow rules are not analyzed yet.`);
-  }
   if (processBuilders) {
     model.warnings.push(`${processBuilders} Process Builder flow(s) found; Process Builder is not analyzed yet.`);
   }

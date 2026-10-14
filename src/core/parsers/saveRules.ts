@@ -15,7 +15,8 @@ export type SaveRuleKind =
   | "EscalationRule"
   | "DuplicateRule"
   | "MatchingRule"
-  | "ApprovalProcess";
+  | "ApprovalProcess"
+  | "WorkflowRule";
 
 export interface SaveRuleDef {
   kind: SaveRuleKind;
@@ -32,8 +33,14 @@ export interface SaveRuleDef {
   matchingRules?: string[];
   /** Approval processes: who can edit a record while it is locked in approval. */
   recordEditability?: string;
-  /** Approval processes: field updates and other actions they run. */
+  /** Approval processes and workflow rules: field updates and other actions they run. */
   actions?: string[];
+  /** Workflow rules: the saves they run on. */
+  events?: ("insert" | "update")[];
+  /** Workflow rules: objects whose records their actions create (tasks). */
+  creates?: string[];
+  /** Workflow rules: some actions run later (time-dependent). */
+  timeDependent?: boolean;
 }
 
 /** `Case.Origin` or `Origin` → `Origin`, for fields of `object`. */
@@ -146,4 +153,65 @@ export function parseApprovalProcess(xml: string, name: string, object: string, 
     recordEditability: text(body.recordEditability),
     actions: uniq(actions),
   };
+}
+
+/**
+ * A workflow file (`Opportunity.workflow-meta.xml`): one entry per rule. A rule reads the fields of
+ * its criteria and formula, and of the field updates and email alerts it runs; its actions are listed
+ * by what they do, and a task action creates Task records.
+ */
+export function parseWorkflow(xml: string, object: string, file: string): SaveRuleDef[] {
+  const { body } = parseMetadataXml(xml);
+  const byName = (el: string) => new Map(nodes(body[el]).map((n) => [key(text(n.fullName) ?? ""), n]));
+  const updates = byName("fieldUpdates");
+  const alerts = byName("alerts");
+  const flows = byName("flowActions");
+  return nodes(body.rules).map((r: XmlNode) => {
+    const timed = nodes(r.workflowTimeTriggers);
+    const actions = [...nodes(r.actions), ...timed.flatMap((t) => nodes(t.actions))];
+    const fieldNodes: unknown[] = [r.criteriaItems, r.formula ? { formula: r.formula } : undefined];
+    const labels: string[] = [];
+    let creates = false;
+    for (const a of actions) {
+      const name = text(a.name) ?? "";
+      const k = key(name);
+      switch (text(a.type)) {
+        case "FieldUpdate": {
+          const u = updates.get(k);
+          fieldNodes.push(u);
+          labels.push(`field update ${text(u?.field) ?? name}`);
+          break;
+        }
+        case "Alert":
+          fieldNodes.push(alerts.get(k));
+          labels.push(`email alert ${name}`);
+          break;
+        case "Task":
+          creates = true;
+          labels.push(`task ${name}`);
+          break;
+        case "OutboundMessage":
+          labels.push(`outbound message ${name}`);
+          break;
+        case "FlowAction":
+          labels.push(`flow ${text(flows.get(k)?.flow) ?? name}`);
+          break;
+        default:
+          labels.push(`${text(a.type) ?? "action"} ${name}`.trim());
+      }
+    }
+    const trigger = text(r.triggerType) ?? "onCreateOrTriggeringUpdate";
+    return {
+      kind: "WorkflowRule" as const,
+      name: `${object}.${text(r.fullName) ?? "rule"}`,
+      object,
+      active: bool(r.active),
+      fields: criteriaFields(object, fieldNodes),
+      file,
+      actions: uniq(labels),
+      events: trigger === "onCreateOnly" ? ["insert" as const] : ["insert" as const, "update" as const],
+      creates: creates ? ["Task"] : undefined,
+      timeDependent: timed.length > 0 || undefined,
+    };
+  });
 }

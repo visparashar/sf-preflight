@@ -408,7 +408,7 @@ Require confirmation for destructive actions so a misunderstood request can't de
 
 A legacy workflow rule changed.
 
-Workflow rules are not analyzed yet; consider migrating them to flows.
+Workflow rules run after the after-save triggers, and their field updates run the triggers again. They are a legacy tool; consider migrating them to flows.
 
 ## field-used-by-lightning
 

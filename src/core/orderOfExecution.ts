@@ -28,6 +28,7 @@ export const PHASE_LABELS: Record<Phase, string> = {
   "after-trigger": "After trigger",
   assignment: "Assignment rule",
   "auto-response": "Auto-response rule",
+  workflow: "Workflow rule",
   escalation: "Escalation rule",
   "after-flow": "After-save flow",
   "cascade-delete": "Cascade delete",
@@ -60,12 +61,12 @@ export function saveProcedure(model: OrgModel, object: string, event: SaveEvent)
     .filter((f) => f.active && f.trigger && key(f.trigger.object) === k && f.trigger.events.includes(event))
     .sort(byRunOrder);
   const triggers = [...model.triggers.values()].filter((t) => key(t.object) === k).sort(byName);
-  const ruleStep = (phase: Phase, r: SaveRuleDef, notes: string[]) =>
+  const ruleStep = (phase: Phase, r: SaveRuleDef, notes: string[], writes: Write[] = []) =>
     steps.push({
       phase,
       phaseLabel: PHASE_LABELS[phase],
       automation: { ...automationRef(r), phase },
-      writes: [],
+      writes,
       notes,
     });
   // Publishing a platform event: subscribers run later, in their own transaction.
@@ -130,6 +131,25 @@ export function saveProcedure(model: OrgModel, object: string, event: SaveEvent)
       ruleStep("assignment", r, ["sets the owner when the save asks for assignment rules"]);
     for (const r of activeRules(model, object, "AutoResponseRule").sort(byName))
       ruleStep("auto-response", r, ["sends an email to the submitter"]);
+    for (const r of activeRules(model, object, "WorkflowRule").sort(byName)) {
+      if (!r.events?.includes(event as "insert" | "update")) continue;
+      const updates = (r.actions ?? []).some((a) => a.startsWith("field update"));
+      ruleStep(
+        "workflow",
+        r,
+        [
+          ...(r.actions?.length ? [r.actions.join("; ")] : []),
+          ...(updates ? ["a field update runs the before and after update triggers (and flows) once more"] : []),
+          ...(r.timeDependent ? ["some actions run later (time-dependent)"] : []),
+        ],
+        (r.creates ?? []).map((o) => ({
+          object: o,
+          op: "insert" as const,
+          via: `${r.name} (task action)`,
+          confidence: "high" as const,
+        })),
+      );
+    }
     for (const r of activeRules(model, object, "EscalationRule").sort(byName))
       ruleStep("escalation", r, ["actions run later, when the case is still open"]);
   }

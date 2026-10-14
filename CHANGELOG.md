@@ -9,10 +9,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+
+- **Legacy workflow rules**: `*.workflow-meta.xml` is parsed into its rules, with the fields their criteria,
+  field updates and email alerts use. Active rules appear in the save-order explanation after the after-save
+  triggers (create-only rules only on insert; a field update notes that triggers run once more; a task action is a
+  Task insert that the cascade follows). Deleting or renaming a field a workflow rule uses is reported, and a rule
+  switched on or off or reading different fields is reported like the other save rules. Process Builder is still not
+  analyzed.
 - **Cascade deletes**: deleting a parent record deletes its master-detail children (and the children of a lookup set
   to "delete the lookup record's children"), so the save-order explanation and the cascade now run the children's
   delete triggers and flows, and their own children in turn. A change that deletes records reaches that automation,
   and its findings (DML or SOQL in a loop, cycles) are reported.
+
 - **Flow trigger order**: record-triggered flows on one object run in Salesforce's order in the save-order
   explanation: trigger orders 1 to 1000 first (ties by API name), then flows without one, then 1001 to 2000. Each
   flow's step says its order, or that it has none and runs by creation date (the project doesn't have creation

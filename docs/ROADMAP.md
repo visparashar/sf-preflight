@@ -34,7 +34,8 @@ AI-authored — before it ships:
 
 ## Next up (M1 follow-ups)
 
-- [ ] Process Builder and legacy workflow rule parsing
+- [x] Legacy workflow rule parsing (rules, field updates, email alerts, tasks: save order, field references, rule changes)
+- [ ] Process Builder parsing (needs a real Process Builder flow file to build against; none was available)
 - [x] Record-triggered flow trigger order (`triggerOrder`) within a phase
 - [x] Before-save flow field assignments as field-level writes
 - [x] Apex: `Trigger.newMap` handlers and platform events (`EventBus.publish`)
