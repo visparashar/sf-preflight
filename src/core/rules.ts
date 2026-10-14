@@ -328,7 +328,7 @@ export const RULES: RuleInfo[] = [
     name: "LegacyWorkflow",
     defaultSeverity: "info",
     summary: "A legacy workflow rule changed.",
-    help: "Workflow rules are not analyzed yet; consider migrating them to flows.",
+    help: "Workflow rules run after the after-save triggers, and their field updates run the triggers again. They are a legacy tool; consider migrating them to flows.",
   },
   {
     id: "field-used-by-lightning",

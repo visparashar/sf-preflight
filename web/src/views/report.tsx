@@ -36,6 +36,7 @@ const AUTOMATION_LABEL: Record<AutomationKind, string> = {
   RollUpSummary: "Roll-up summary",
   LightningComponent: "Lightning component",
   ApprovalProcess: "Approval process",
+  WorkflowRule: "Workflow rule",
   AssignmentRule: "Assignment rule",
   AutoResponseRule: "Auto-response rule",
   DuplicateRule: "Duplicate rule",

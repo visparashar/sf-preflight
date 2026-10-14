@@ -505,6 +505,7 @@ export type AutomationKind =
   | "AutoResponseRule"
   | "EscalationRule"
   | "ApprovalProcess"
+  | "WorkflowRule"
   | "OmniScript"
   | "IntegrationProcedure"
   | "DataMapper"
@@ -526,6 +527,7 @@ export type Phase =
   | "after-trigger"
   | "assignment"
   | "auto-response"
+  | "workflow"
   | "escalation"
   | "after-flow"
   | "rollup";

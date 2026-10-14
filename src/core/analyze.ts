@@ -163,6 +163,8 @@ const describe = (a: AutomationRef) => {
       return `escalation rule ${a.name}`;
     case "ApprovalProcess":
       return `approval process ${a.name}`;
+    case "WorkflowRule":
+      return `workflow rule ${a.name}`;
     case "OmniScript":
     case "IntegrationProcedure":
     case "DataMapper":
@@ -768,12 +770,15 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
               base !== undefined ? parseOutboundMessages(base, comp.name, comp.file) : undefined,
             ),
           );
+        const rules = deleted ? [] : saveRulesOf(model).filter((r) => r.file === comp.file);
+        const before =
+          base !== undefined ? parseSaveRuleFile(comp, base) : change.changeType === "added" ? [] : undefined;
+        findings.push(...saveRuleChangeFindings(model, comp, rules, before));
         addFinding({
           rule: "legacy-workflow",
           severity: "info",
           title: `Legacy workflow changed: ${comp.name}`,
-          detail:
-            "Workflow rules are not analyzed yet, apart from their outbound messages; consider migrating them to flows.",
+          detail: `${rules.length ? `${rules.filter((r) => r.active).length} of ${rules.length} rule(s) active. ` : ""}Workflow rules run after the after-save triggers and are a legacy tool; consider migrating them to flows.`,
           files: [comp.file],
         });
         break;

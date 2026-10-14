@@ -8,6 +8,7 @@ import {
   parseDuplicateRule,
   parseMatchingRules,
   parseRuleSet,
+  parseWorkflow,
   type SaveRuleDef,
 } from "./parsers/saveRules.js";
 import type { AutomationRef, ComponentRef, Finding, OrgModel } from "./types.js";
@@ -32,12 +33,14 @@ const LABEL: Record<SaveRuleDef["kind"], string> = {
   DuplicateRule: "duplicate rule",
   MatchingRule: "matching rule",
   ApprovalProcess: "approval process",
+  WorkflowRule: "workflow rule",
 };
 export const ruleLabel = (r: SaveRuleDef) => `${LABEL[r.kind]} ${r.name}`;
 
 /** Parse one save-rule file. `Object.Name` components carry the object in the name. */
 export function parseSaveRuleFile(comp: ComponentRef, xml: string): SaveRuleDef[] {
   const [object = comp.name] = comp.name.split(".");
+  if (comp.type === "WorkflowRule") return parseWorkflow(xml, object, comp.file);
   switch (comp.metadataType) {
     case "AssignmentRules":
     case "AutoResponseRules":
@@ -62,7 +65,7 @@ export function saveRulesOf(model: OrgModel): SaveRuleDef[] {
   if (rules) return rules;
   rules = [];
   for (const c of model.components.values()) {
-    if (!c.metadataType || !SAVE_RULE_TYPES.has(c.metadataType)) continue;
+    if (c.type !== "WorkflowRule" && (!c.metadataType || !SAVE_RULE_TYPES.has(c.metadataType))) continue;
     try {
       rules.push(...parseSaveRuleFile(c, readProjectFile(model, c.file)));
     } catch {
@@ -183,6 +186,8 @@ const EFFECT: Record<SaveRuleDef["kind"], string> = {
   DuplicateRule:
     "Duplicate rules check each saved record against matching rules after validation rules run, and can alert or block.",
   MatchingRule: "Matching rules decide which records the duplicate rules that use them treat as duplicates.",
+  WorkflowRule:
+    "Workflow rules run after the after-save triggers: field updates change the record and run its before and after update triggers (and flows) once more; email alerts and outbound messages go out; task actions create Task records. Workflow is a legacy tool; consider moving the rule to a flow.",
   ApprovalProcess:
     "Approval processes lock records while they are in approval and run field updates when they are approved, rejected or recalled. Locked records can only be edited by the people the process allows.",
 };
