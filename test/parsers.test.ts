@@ -95,6 +95,20 @@ describe("parseFlow", () => {
     expect(flow("RecordAfterSave", "Status").fieldSets).toEqual([]);
   });
 
+  it("reads the trigger order, from the flow or its start, within 1 to 2000", () => {
+    const flow = (inStart: string, inFlow = "") =>
+      parseFlow(
+        `<?xml version="1.0"?><Flow xmlns="http://soap.sforce.com/2006/04/metadata"><status>Active</status>${inFlow}<start><object>Case</object><recordTriggerType>Create</recordTriggerType><triggerType>RecordAfterSave</triggerType>${inStart}</start></Flow>`,
+        "F",
+        "f",
+      ).trigger?.order;
+    expect(flow("", "<triggerOrder>240</triggerOrder>")).toBe(240);
+    expect(flow("<triggerOrder>1500</triggerOrder>")).toBe(1500);
+    expect(flow("")).toBeUndefined();
+    expect(flow("<triggerOrder>0</triggerOrder>")).toBeUndefined();
+    expect(flow("<triggerOrder>2001</triggerOrder>")).toBeUndefined();
+  });
+
   it("collects field references from filters, assignments and $Record", () => {
     const flow = parseFlow(
       read("flows/Account_Sync_Tier_To_Contacts.flow-meta.xml"),

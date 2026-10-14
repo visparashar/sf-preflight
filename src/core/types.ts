@@ -138,6 +138,8 @@ export interface FlowTrigger {
   filterFormula?: string;
   /** "Only when a record is updated to meet the condition requirements". */
   requiresChange?: boolean;
+  /** "Trigger order" (1 to 2000): which flows on the same object and timing run first. Unset when not given. */
+  order?: number;
   hasScheduledPaths: boolean;
 }
 

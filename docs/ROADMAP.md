@@ -35,7 +35,7 @@ AI-authored — before it ships:
 ## Next up (M1 follow-ups)
 
 - [ ] Process Builder and legacy workflow rule parsing
-- [ ] Record-triggered flow trigger order (`triggerOrder`) within a phase
+- [x] Record-triggered flow trigger order (`triggerOrder`) within a phase
 - [x] Before-save flow field assignments as field-level writes
 - [x] Apex: `Trigger.newMap` handlers and platform events (`EventBus.publish`)
 - [x] Apex: detect ignored `Database.SaveResult` / `allOrNone=false` failures

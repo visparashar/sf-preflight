@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Flow trigger order**: record-triggered flows on one object run in Salesforce's order in the save-order
+  explanation: trigger orders 1 to 1000 first (ties by API name), then flows without one, then 1001 to 2000. Each
+  flow's step says its order, or that it has none and runs by creation date (the project doesn't have creation
+  dates, so those are shown by name). Read from `<triggerOrder>` on the flow or its start.
 - **Before-save flows: the fields they set**: Assignment elements (and Update Records on `$Record`) in a
   before-save flow are read as the fields it sets. The save-order explanation shows them on the flow's step
   (`sets Region__c`), and a new or changed validation rule's finding names the before-save flows that set the fields
