@@ -30,6 +30,8 @@ export function parseField(xml: string, object: string, fallbackName: string, fi
     referenceTo,
     required: bool(body.required) || type === "MasterDetail" || undefined,
     defaultValue: text(body.defaultValue),
+    cascadeDelete:
+      type === "MasterDetail" || (type === "Lookup" && text(body.deleteConstraint) === "Cascade") || undefined,
     file,
   };
 

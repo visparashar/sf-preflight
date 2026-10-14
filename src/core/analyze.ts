@@ -153,6 +153,8 @@ const describe = (a: AutomationRef) => {
       return `validation rule ${a.name}`;
     case "RollUpSummary":
       return `roll-up ${a.name}`;
+    case "CascadeDelete":
+      return `cascade delete of ${a.name}`;
     case "DuplicateRule":
       return `duplicate rule ${a.name}`;
     case "AssignmentRule":
