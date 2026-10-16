@@ -82,7 +82,7 @@ export function insightFor(model: OrgModel, rel: string): Insight {
       const refs = fieldReferences(model, object, field);
       if (refs.length) {
         parts.push(`Used by ${countBy(refs.map((r) => r.from.kind))}`);
-        details.push(...refs.slice(0, 20).map((r) => refLabel(r.from)));
+        details.push(...refs.slice(0, 20).map((r) => `${refLabel(r.from)}${r.via ? ` (through ${r.via})` : ""}`));
         if (refs.length > 20) details.push(`… and ${refs.length - 20} more`);
       }
       const save = saveSummary(model, object);

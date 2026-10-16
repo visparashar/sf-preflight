@@ -303,7 +303,10 @@ export function createMcpServer(opts: McpServerOptions): McpServer {
         return text(
           [
             `${refs.length} reference(s) to ${args.object}.${args.field}:`,
-            ...refs.map((r) => `- ${r.from.kind} ${r.from.name}${r.from.file ? ` (${r.from.file})` : ""}`),
+            ...refs.map(
+              (r) =>
+                `- ${r.from.kind} ${r.from.name}${r.via ? ` through ${r.via}` : ""}${r.from.file ? ` (${r.from.file})` : ""}`,
+            ),
           ].join("\n"),
         );
       } catch (err) {

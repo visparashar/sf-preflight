@@ -46,19 +46,41 @@ export function triggerWrites(model: OrgModel, trig: ApexTriggerDef): Write[] {
   return uniqBy(out, writeKey);
 }
 
-/** Writes performed by a flow, its Apex actions and its subflows. */
-export function flowWrites(model: OrgModel, flow: FlowDef, seen = new Set<string>(), depth = 0): Write[] {
+/**
+ * Writes performed by a flow, its Apex actions and its subflows.
+ *
+ * `recordVars` names this flow's variables that hold the top-level flow's triggering record (passed
+ * in as `$Record` by a caller): an update through one of them is an update of that record.
+ */
+export function flowWrites(
+  model: OrgModel,
+  flow: FlowDef,
+  seen = new Set<string>(),
+  depth = 0,
+  recordVars = new Set<string>(),
+): Write[] {
   if (seen.has(key(flow.name)) || depth > MAX_DEPTH) return [];
   seen.add(key(flow.name));
-  const out: Write[] = flow.writes.map((w) => ({ ...w, via: `${flow.name}${w.via ? ` › ${w.via}` : ""}` }));
+  const out: Write[] = flow.writes.map((w) => ({
+    ...w,
+    via: `${flow.name}${w.via ? ` › ${w.via}` : ""}`,
+    ...(w.op === "update" && w.recordVar && recordVars.has(key(w.recordVar)) ? { selfUpdate: true } : {}),
+  }));
   const classSeen = new Set<string>();
   for (const action of flow.apexActions) {
     const cls = model.classes.get(key(action));
     if (cls) out.push(...classWrites(model, cls, classSeen));
   }
-  for (const sub of flow.subflows) {
-    const subflow = model.flows.get(key(sub));
-    if (subflow) out.push(...flowWrites(model, subflow, seen, depth + 1));
+  const calls = flow.subflowCalls ?? flow.subflows.map((f) => ({ flow: f, inputs: [] }));
+  for (const call of calls) {
+    const subflow = model.flows.get(key(call.flow));
+    if (!subflow) continue;
+    const passed = new Set(
+      call.inputs
+        .filter((i) => (i.ref === "$Record" && depth === 0 && flow.trigger) || recordVars.has(key(i.ref)))
+        .map((i) => key(i.variable)),
+    );
+    out.push(...flowWrites(model, subflow, seen, depth + 1, passed));
   }
   return uniqBy(out, writeKey);
 }
@@ -137,6 +159,39 @@ export function flexipagesPlacing(model: OrgModel, name: string): FlexiPageDef[]
       return custom !== undefined && key(custom) === k;
     }),
   );
+}
+
+/**
+ * Flows that run, directly or through other subflows, a flow that uses `Object.Field`
+ * (`direct`: the flows that use it themselves). Each comes with the subflow chain it reaches
+ * the field through and whether its call passes its triggering record.
+ */
+export function flowsReachingThroughSubflows(
+  model: OrgModel,
+  direct: FlowDef[],
+): { flow: FlowDef; chain: string[]; passesRecord: boolean }[] {
+  const out: { flow: FlowDef; chain: string[]; passesRecord: boolean }[] = [];
+  const done = new Set(direct.map((f) => key(f.name)));
+  let level = direct.map((f) => ({ flow: f, chain: [] as string[] }));
+  for (let depth = 0; depth < MAX_DEPTH && level.length; depth++) {
+    const next: typeof level = [];
+    for (const { flow, chain } of level) {
+      for (const parent of callersOfFlow(model, flow.name)) {
+        if (done.has(key(parent.name))) continue;
+        done.add(key(parent.name));
+        const viaChain = [flow.name, ...chain];
+        const passesRecord =
+          !!parent.trigger &&
+          (parent.subflowCalls ?? []).some(
+            (c) => key(c.flow) === key(flow.name) && c.inputs.some((i) => i.ref === "$Record"),
+          );
+        out.push({ flow: parent, chain: viaChain, passesRecord });
+        next.push({ flow: parent, chain: viaChain });
+      }
+    }
+    level = next;
+  }
+  return out;
 }
 
 /** Flows that call `flowName` as a subflow. */

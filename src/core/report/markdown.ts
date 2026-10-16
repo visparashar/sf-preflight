@@ -267,7 +267,10 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
   if (result.references.length) {
     out.push("<details><summary><strong>References to changed fields</strong></summary>", "");
     out.push("| Field | Referenced by |", "|---|---|");
-    for (const r of result.references) out.push(`| \`${esc(r.to)}\` | ${r.from.kind} \`${esc(r.from.name)}\` |`);
+    for (const r of result.references)
+      out.push(
+        `| \`${esc(r.to)}\` | ${r.from.kind} \`${esc(r.from.name)}\`${r.via ? ` (through ${esc(r.via)})` : ""} |`,
+      );
     out.push("", "</details>", "");
   }
 

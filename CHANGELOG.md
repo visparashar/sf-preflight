@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Subflows in field tracing**: a flow's field references now include fields it reads or sets through record
+  variables (Decision conditions, Formula expressions, Assignments, element inputs), not only `$Record` and record
+  element filters and assignments. A field used only inside a subflow is reported for every flow that runs that
+  subflow (up to four levels), with the subflow chain and whether the caller passes its triggering record
+  (`through subflow Check_Stage (passes $Record)`). A deleted field still names only the flows that use it directly.
+- **Subflow inputs**: Subflow elements record what they pass into the subflow's variables. A subflow that updates the
+  record its record-triggered caller passed in as `$Record` now counts as that caller updating its own record, so the
+  after-save re-entry finding and the save-order explanation cover it.
+
 ## [0.13.0] - 2026-10-14
 
 ### Added
