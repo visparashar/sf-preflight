@@ -1,6 +1,6 @@
 {
   "name": "sf-plugin-preflight",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Salesforce CLI plugin for sf-preflight: see what a Salesforce change sets off before it ships. Adds `sf preflight analyze`, `tests`, `agents`, `incidents`, `monitor`, `rollback` and more.",
   "license": "Apache-2.0",
   "author": "sf-preflight contributors",
@@ -55,7 +55,7 @@
   },
   "dependencies": {
     "@oclif/core": "^4.0.0",
-    "sf-preflight": "^0.13.0"
+    "sf-preflight": "^0.14.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

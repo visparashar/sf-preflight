@@ -1,7 +1,7 @@
 {
   "name": "sf-preflight",
   "displayName": "sf-preflight",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Checks Salesforce metadata changes before they ship: what a change sets off (flows, triggers, validation rules, roll-ups, permissions, Agentforce actions), the risks, the tests that matter, and partial rollbacks for production errors.",
   "author": { "name": "sf-preflight contributors", "url": "https://github.com/visparashar/sf-preflight" },
   "homepage": "https://github.com/visparashar/sf-preflight",
@@ -11,7 +11,7 @@
   "mcpServers": {
     "sf-preflight": {
       "command": "npx",
-      "args": ["-y", "sf-preflight@0.13.0", "mcp", "--root", "${CLAUDE_PROJECT_DIR}"]
+      "args": ["-y", "sf-preflight@0.14.0", "mcp", "--root", "${CLAUDE_PROJECT_DIR}"]
     }
   }
 }
