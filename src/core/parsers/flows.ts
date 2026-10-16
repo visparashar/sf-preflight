@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { DmlOp, FlowDef, FlowTrigger, FlowValue, SaveEvent, Timing, Write } from "../types.js";
+import type { DmlOp, FlowDef, FlowTrigger, FlowValue, SaveEvent, SubflowCall, Timing, Write } from "../types.js";
 import { nodes, parseMetadataXml, text, uniq, uniqBy, type XmlNode } from "../util.js";
 
 const RECORD_TRIGGER_EVENTS: Record<string, SaveEvent[]> = {
@@ -66,12 +66,16 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
     let object = text(el.object);
     let self = false;
     let confidence: Write["confidence"] = "high";
+    let recordVar: string | undefined;
     if (!object) {
-      const resolved = resolve(text(el.inputReference));
+      const ref = text(el.inputReference);
+      const resolved = resolve(ref);
       object = resolved.object;
       self = resolved.self;
       if (!object) return;
       if (!self) confidence = "medium";
+      // A write through a plain record variable: a caller may have passed its own record in.
+      if (!self && ref && !ref.includes(".") && symbols.has(ref.toLowerCase())) recordVar = ref;
     }
     const fields = uniq(
       nodes(el.inputAssignments)
@@ -89,7 +93,16 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
       const f = text(filter.field);
       if (f) fieldRefs.push(`${object}.${f}`);
     }
-    writes.push({ object, op, fields, selfUpdate: self || undefined, linkField, via: elementName, confidence });
+    writes.push({
+      object,
+      op,
+      fields,
+      selfUpdate: self || undefined,
+      linkField,
+      via: elementName,
+      recordVar,
+      confidence,
+    });
   };
 
   for (const el of nodes(body.recordUpdates)) addWrite(el, "update");
@@ -125,11 +138,27 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
       .map((a) => text(a.actionName))
       .filter((a): a is string => !!a),
   );
-  const subflows = uniq(
-    nodes(body.subflows)
-      .map((s) => text(s.flowName))
-      .filter((s): s is string => !!s),
-  );
+  const subflowCalls: SubflowCall[] = [];
+  for (const el of nodes(body.subflows)) {
+    const flow = text(el.flowName);
+    if (!flow) continue;
+    const inputs: SubflowCall["inputs"] = [];
+    for (const a of nodes(el.inputAssignments)) {
+      const variable = text(a.name);
+      const value = flowValue(a.value);
+      if (variable && value?.kind === "reference") inputs.push({ variable, ref: value.value });
+    }
+    subflowCalls.push({ flow, inputs });
+  }
+  const subflows = uniq(subflowCalls.map((c) => c.flow));
+
+  // Fields read or set through record variables anywhere in the flow: Decision conditions,
+  // Formula expressions, Assignments, element inputs and outputs (`opp.StageName`, `{!opp.Amount}`).
+  // Relationship paths (`opp.Account.Name`) are left out, like `$Record.Account.Name` below.
+  for (const m of xml.matchAll(/(?<![\w$.])([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)(?![\w.])/g)) {
+    const object = resolve(m[1]).object;
+    if (object && !m[1]!.startsWith("$")) fieldRefs.push(`${object}.${m[2]}`);
+  }
 
   if (trigger) {
     for (const f of trigger.entryFields) fieldRefs.push(`${trigger.object}.${f}`);
@@ -156,6 +185,7 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
     reads: uniq(reads),
     apexActions,
     subflows,
+    subflowCalls,
     fieldRefs: uniqBy(fieldRefs, (f) => f.toLowerCase()),
     file,
   };

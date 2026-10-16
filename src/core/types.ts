@@ -66,6 +66,8 @@ export interface Write {
   linkField?: string;
   /** Flow element name or Apex line reference. */
   via?: string;
+  /** For a flow write through a record variable (not `$Record`): that variable's name. */
+  recordVar?: string;
   confidence: Confidence;
 }
 
@@ -162,9 +164,18 @@ export interface FlowDef {
   reads: string[];
   apexActions: string[];
   subflows: string[];
+  /** Each Subflow element: the flow it runs and what it passes into the subflow's variables. */
+  subflowCalls: SubflowCall[];
   /** `Object.Field` references found anywhere in the flow. */
   fieldRefs: string[];
   file: string;
+}
+
+/** A Subflow element in a flow. */
+export interface SubflowCall {
+  flow: string;
+  /** Input assignments: the subflow's variable and the caller's value (`$Record`, a variable, …). */
+  inputs: { variable: string; ref: string }[];
 }
 
 /** A partial-success save (`Database.update(records, false)`) whose per-record failures nobody reads. */
@@ -656,6 +667,11 @@ export interface Reference {
         file?: string;
       };
   to: string;
+  /**
+   * Set when the reference is indirect: the flow runs a subflow that uses the field. Names the
+   * subflow chain, e.g. "subflow Check_Stage" or "subflow A › B".
+   */
+  via?: string;
 }
 
 /**

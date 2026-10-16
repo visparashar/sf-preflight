@@ -31,6 +31,7 @@ import {
   callersOfFlow,
   classWrites,
   flexipagesPlacing,
+  flowsReachingThroughSubflows,
   flowWrites,
   knownClassRefs,
   lightningCallingClass,
@@ -455,7 +456,8 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         );
         const refs = fieldReferences(model, object, field);
         references.push(...refs);
-        const nonPermRefs = refs.filter((r) => r.from.kind !== "PermissionSet" && r.from.kind !== "Profile");
+        // Flows that reach the field only through a subflow don't block the deployment themselves.
+        const nonPermRefs = refs.filter((r) => r.from.kind !== "PermissionSet" && r.from.kind !== "Profile" && !r.via);
         if (deleted && nonPermRefs.length) {
           addFinding({
             rule: "deleted-still-referenced",
@@ -1267,9 +1269,15 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
       refs.push({ from: { kind: "ValidationRule", name: vr.name, file: vr.file }, to: target });
     }
   }
-  for (const flow of model.flows.values()) {
-    if (flow.fieldRefs.some((r) => key(r) === tk))
-      refs.push({ from: { kind: "Flow", name: flow.name, file: flow.file }, to: target });
+  const directFlows = [...model.flows.values()].filter((flow) => flow.fieldRefs.some((r) => key(r) === tk));
+  for (const flow of directFlows) refs.push({ from: { kind: "Flow", name: flow.name, file: flow.file }, to: target });
+  // Flows that use the field only inside a subflow they run.
+  for (const { flow, chain, passesRecord } of flowsReachingThroughSubflows(model, directFlows)) {
+    refs.push({
+      from: { kind: "Flow", name: flow.name, file: flow.file },
+      to: target,
+      via: `subflow ${chain.join(" › ")}${passesRecord ? " (passes $Record)" : ""}`,
+    });
   }
   const re = new RegExp(`\\b${field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
   const apexUses = (def: ApexAnalysis): boolean => {
