@@ -39,6 +39,7 @@ import {
   generateTests,
   gitRoot,
   incidentsToMarkdown,
+  initProject,
   investigateIncidents,
   loadPolicy,
   loadProject,
@@ -69,6 +70,7 @@ import {
   toJunit,
   toMarkdown,
   toSarif,
+  toTerminal,
   type ValidationResult,
   validateTests,
   validationToMarkdown,
@@ -90,9 +92,15 @@ const { version } = JSON.parse(readFileSync(new URL("../package.json", import.me
   version: string;
 };
 
-type Format = "md" | "json" | "sarif" | "junit";
+type Format = "text" | "md" | "json" | "sarif" | "junit";
 
-function render(result: AnalysisResult, format: Format, failOn?: FailOn): string {
+/** Colors on a terminal, unless NO_COLOR is set (https://no-color.org) or FORCE_COLOR asks for them. */
+const useColor = () =>
+  process.env.FORCE_COLOR ? process.env.FORCE_COLOR !== "0" : !!process.stdout.isTTY && !process.env.NO_COLOR;
+
+function render(result: AnalysisResult, format: Format, failOn?: FailOn, nextArgs?: string): string {
+  if (format === "text")
+    return toTerminal(result, { color: useColor(), width: Math.min(process.stdout.columns || 100, 120), nextArgs });
   if (format === "json") return JSON.stringify(result, null, 2);
   if (format === "sarif") return JSON.stringify(toSarif(result, { toolVersion: version }), null, 2);
   if (format === "junit") return toJunit(result, result.gate?.failOn ?? failOn);
@@ -225,7 +233,12 @@ const policyOptions = (cmd: Command) =>
 policyOptions(
   program.command("analyze").description("Analyze a change (git diff or explicit files) in an SFDX project"),
 )
-  .addOption(new Option("--format <format>", "output format").choices(["md", "json", "sarif", "junit"]).default("md"))
+  .addOption(
+    new Option(
+      "--format <format>",
+      "output format (default: text on a terminal, md when piped or written with --out)",
+    ).choices(["text", "md", "json", "sarif", "junit"]),
+  )
   .option("-o, --out <file>", "write the report to a file instead of stdout")
   .option("--md-out <file>", "also write a Markdown report to this file")
   .option("--json-out <file>", "also write a JSON report to this file")
@@ -242,7 +255,7 @@ policyOptions(
   .action(
     (
       opts: PolicyOptions & {
-        format: Format;
+        format?: Format;
         out?: string;
         mdOut?: string;
         jsonOut?: string;
@@ -253,7 +266,15 @@ policyOptions(
       },
     ) => {
       const { result, approvals, tests, agentTests } = analyzeWithPolicy(opts, !!opts.gate || !!opts.evidenceOut);
-      const output = render(result, opts.format, opts.failOn);
+      // A person at a terminal gets the short report; pipes, files and CI keep getting Markdown.
+      const format = opts.format ?? (process.stdout.isTTY && !opts.out ? "text" : "md");
+      // Repeat the options that chose the change (a found project folder is found again).
+      const nextArgs = [
+        ...(opts.project !== "." && !path.isAbsolute(opts.project) ? [`--project ${opts.project}`] : []),
+        ...(opts.base ? [`--base ${opts.base}`] : []),
+        ...(opts.head ? [`--head ${opts.head}`] : []),
+      ].join(" ");
+      const output = render(result, format, opts.failOn, nextArgs || undefined);
       if (opts.out) writeFileSync(opts.out, `${output}\n`);
       else process.stdout.write(`${output}\n`);
       if (opts.mdOut) writeFileSync(opts.mdOut, `${render(result, "md")}\n`);
@@ -279,6 +300,71 @@ policyOptions(
       }
     },
   );
+
+program
+  .command("init")
+  .description("Set up a project: a starter .preflight.json and the GitHub pull request workflow")
+  .option("-p, --project <dir>", "SFDX project directory", ".")
+  .option("--hook", "also install the git pre-commit hook (preflight hook install)")
+  .option("--workflow", "write the GitHub Actions workflow even if the repository doesn't look like it's on GitHub")
+  .option("--no-workflow", "don't write the GitHub Actions workflow")
+  .option("--force", "replace files that already exist")
+  .option("--dry-run", "show what would be written, without writing")
+  .action((opts: { project: string; hook?: boolean; workflow?: boolean; force?: boolean; dryRun?: boolean }) => {
+    const r = initProject({
+      projectDir: opts.project,
+      force: opts.force,
+      dryRun: opts.dryRun,
+      workflow: opts.workflow,
+    });
+    const cwd = process.cwd();
+    const shown = (f: string) => path.relative(cwd, path.resolve(opts.project, f)) || f;
+    const lines: string[] = [];
+    const hookShown = r.gitRoot ? path.relative(cwd, path.join(r.gitRoot, ".git", "hooks", "pre-commit")) : "";
+    const width = Math.max(...r.files.map((f) => shown(f.file).length), opts.hook ? hookShown.length : 0);
+    for (const f of r.files) {
+      const note = f.status === "exists" ? "already there, left as is (--force replaces it)" : f.what;
+      lines.push(`  ${f.status.padEnd(13)} ${shown(f.file).padEnd(width)}  ${note}`);
+    }
+    if (opts.hook) {
+      if (!r.gitRoot) lines.push("  skipped       pre-commit hook: not a git repository");
+      else if (opts.dryRun) lines.push(`  ${"would install".padEnd(13)} ${hookShown.padEnd(width)}  pre-commit hook`);
+      else {
+        const h = installHook(opts.project, { version, force: opts.force });
+        const hookFile = path.relative(cwd, h.file).padEnd(width);
+        lines.push(
+          h.status === "exists-other"
+            ? `  skipped       ${hookFile}  another pre-commit hook is there (--force replaces it, or add: npx --yes sf-preflight hook run)`
+            : `  ${h.status.padEnd(13)} ${hookFile}  checks staged Salesforce metadata before each commit`,
+        );
+      }
+    }
+    if (r.workflowSkipped)
+      lines.push(
+        `  skipped       CI workflow: ${r.workflowSkipped} (GitLab, Azure DevOps, Jenkins, Bitbucket: see https://github.com/visparashar/sf-preflight/blob/main/docs/PIPELINES.md)`,
+      );
+    const written = r.files.filter((f) => f.status === "created" || f.status === "replaced").map((f) => shown(f.file));
+    console.log(
+      [
+        opts.dryRun ? "sf-preflight init (dry run, nothing written):" : "sf-preflight is set up:",
+        ...lines,
+        "",
+        `Changes are compared with "${r.baseBranch}".${
+          r.files.some((f) => f.file.endsWith(".preflight.json") && f.status !== "exists")
+            ? " Findings already there don't fail the gate; new high ones do."
+            : ""
+        }`,
+        "",
+        "Next:",
+        "  preflight analyze        see what your current changes set off",
+        ...(written.length ? [`  git add ${written.join(" ")} && git commit -m "Add sf-preflight"`] : []),
+        ...(r.workflowSkipped
+          ? []
+          : ['  On GitHub, make the "preflight" check required (Settings → Branches) to block risky merges.']),
+        ...(opts.hook ? [] : ["  preflight hook install   also check each commit before it's made"]),
+      ].join("\n"),
+    );
+  });
 
 program
   .command("fix")
@@ -1096,6 +1182,7 @@ program
 
 /** Commands whose --project is the SFDX project to read (not a folder to install into). */
 const READS_PROJECT = new Set([
+  "init",
   "analyze",
   "fix",
   "evidence",
@@ -1151,7 +1238,7 @@ const GROUPS: [string, string[]][] = [
   ["Check a change:", ["analyze", "fix", "tests", "explain", "evidence", "baseline"]],
   ["Agentforce:", ["agents", "agent-tests"]],
   ["After release:", ["incidents", "rollback", "monitor", "notify"]],
-  ["Set up:", ["hook", "agent-hook", "skill", "mcp"]],
+  ["Set up:", ["init", "hook", "agent-hook", "skill", "mcp"]],
 ];
 for (const [heading, names] of GROUPS)
   for (const name of names) program.commands.find((c) => c.name() === name)?.helpGroup(heading);
@@ -1159,6 +1246,7 @@ program.addHelpText(
   "after",
   `
 Get started (from your SFDX project's folder):
+  preflight init                    set up the policy, the pull request workflow and (with --hook) a pre-commit hook
   preflight analyze                 what your branch's changes set off, compared with the default branch
   preflight analyze --base develop  compare with another branch
   preflight analyze --files <path>  check specific files, no git needed

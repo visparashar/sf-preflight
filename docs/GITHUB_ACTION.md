@@ -11,6 +11,9 @@ findings to GitHub code scanning.
 
 ## Quick start
 
+`npx sf-preflight init` writes this workflow (and a starter `.preflight.json`) for you, with your
+default branch and project folder filled in. Or add it by hand:
+
 ```yaml
 # .github/workflows/preflight.yml
 name: Preflight

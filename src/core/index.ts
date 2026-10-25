@@ -97,6 +97,7 @@ export {
   parseApprovals,
 } from "./gate.js";
 export * from "./incidents/index.js";
+export { type InitFile, type InitOptions, type InitResult, initProject } from "./init.js";
 export { type Insight, insightFor } from "./insight.js";
 export {
   type AuditEntry,
@@ -152,6 +153,7 @@ export { detectAiTools, gitProvenance } from "./provenance.js";
 export { toJunit } from "./report/junit.js";
 export { toMarkdown } from "./report/markdown.js";
 export { toSarif } from "./report/sarif.js";
+export { type TerminalOptions, toTerminal, wrapText } from "./report/terminal.js";
 export { RULES, ruleInfo } from "./rules.js";
 export { type Suggestion, suggestionFor, suggestionsFor } from "./suggestions.js";
 export {
