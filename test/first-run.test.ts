@@ -85,6 +85,12 @@ describe("the base branch", () => {
     );
   });
 
+  it("accepts a tree as the base, such as the empty tree (every file added)", () => {
+    sfdxRepo(dir);
+    const { result } = analyzeChange({ projectDir: dir, base: "4b825dc642cb6eb9a060e54bf8d69288fbee4904" });
+    expect(changed(result)).toEqual(["Account.Region__c", "Account.Tier__c"]);
+  });
+
   it("points to --files outside git", () => {
     writeFileSync(path.join(dir, "sfdx-project.json"), JSON.stringify({ packageDirectories: [{ path: "force-app" }] }));
     write(FIELD_A, field("Tier__c", "Tier"));
