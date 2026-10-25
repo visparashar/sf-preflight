@@ -15,6 +15,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Project folder found for you**: without `--project`, commands use the SFDX project the current folder is in
   (searching up to the git root, like git finds its repository), or the only project in a folder below it.
 - **Grouped `--help`** with a "Get started" section.
+- **`preflight init`**: sets a project up in one step: a starter `.preflight.json` (gate on high findings, counting
+  only the ones a change introduces) and, on GitHub, the pull request workflow with the default branch and
+  project folder filled in; `--hook` also installs the pre-commit hook. Existing files are left alone (`--force`
+  replaces them); `--dry-run` shows what it would write.
+- **A terminal report**: on a terminal, `preflight analyze` prints a short report (`--format text`): the risk,
+  warnings first, findings with the explanation for high ones, the cascade, suggested tests and the commands to
+  run next, wrapped to the terminal and colored (`NO_COLOR` turns colors off). Piped output, `--out` and CI keep
+  the Markdown report.
 
 ### Fixed
 

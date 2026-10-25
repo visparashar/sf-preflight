@@ -70,11 +70,21 @@ It compares your branch, committed and uncommitted, with the default branch (`or
 left it. Pass `--base <branch>` to compare with another branch, or `--files <paths...>` to check
 specific files without git.
 
+On a terminal you get a short report: the risk, the findings, the cascade and what to run next.
+Piped or written with `--out`, the output is the full Markdown report for a pull request.
+
 Or install the `preflight` command globally:
 
 ```bash
 npm install -g sf-preflight
 preflight analyze
+```
+
+To set up a project in one step (a starter `.preflight.json` that gates on new high findings, the
+GitHub pull request workflow, and with `--hook` a pre-commit hook):
+
+```bash
+npx sf-preflight init --hook
 ```
 
 To run from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md#development-setup).
@@ -120,7 +130,7 @@ preflight rollback 9c607ea --component ValidationRule:Opportunity.Require_Close_
 | `-b, --base <ref>` | the default branch | Git base ref; the comparison starts where your branch left it |
 | `--head <ref>` | working tree | Git head ref |
 | `-f, --files <paths...>` | — | Analyze these files instead of a git diff |
-| `--format <md\|json\|sarif\|junit>` | `md` | Output format |
+| `--format <text\|md\|json\|sarif\|junit>` | `text` on a terminal, else `md` | Output format |
 | `--md-out`, `--json-out`, `--sarif-out`, `--junit-out <file>` | — | Also write the report in another format |
 | `--gate` | — | Evaluate the quality gate from `.preflight.json`; exit with code 2 when it fails ([details](docs/CONFIG.md)) |
 | `--config <file>`, `--no-config` | `.preflight.json` | Policy file to use, or none |
