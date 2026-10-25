@@ -35,10 +35,13 @@ export function gitRoot(dir: string): string | undefined {
   }
 }
 
-/** Whether `ref` names a commit in the repository. */
+/**
+ * Whether `ref` names something `git diff` can compare with: a commit, or a tree such as the empty
+ * tree (`4b825dc…`, used to treat every file as added).
+ */
 export function refExists(repoRoot: string, ref: string): boolean {
   try {
-    git(repoRoot, ["rev-parse", "--verify", "--quiet", `${assertSafeRef(ref)}^{commit}`]);
+    git(repoRoot, ["rev-parse", "--verify", "--quiet", `${assertSafeRef(ref)}^{tree}`]);
     return true;
   } catch {
     return false;
