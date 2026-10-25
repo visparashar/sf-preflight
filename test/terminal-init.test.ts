@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { analyzeChange, initProject, loadPolicy, toTerminal } from "../src/core/index.js";
+import { remoteHost } from "../src/core/init.js";
 
 const CLI = path.resolve("dist/cli.js");
 const SAMPLE = path.resolve("fixtures/sample-org");
@@ -105,6 +106,15 @@ describe("preflight init", () => {
     expect(readFileSync(path.join(dir, ".preflight.json"), "utf8")).toMatch(/medium/);
     initProject({ projectDir: dir, force: true });
     expect(readFileSync(path.join(dir, ".preflight.json"), "utf8")).toMatch(/"baseline": "base"/);
+  });
+
+  it("recognizes GitHub remotes by their host only", () => {
+    expect(remoteHost("https://github.com/acme/crm.git")).toBe("github.com");
+    expect(remoteHost("git@github.com:acme/crm.git")).toBe("github.com");
+    expect(remoteHost("ssh://git@github.com/acme/crm.git")).toBe("github.com");
+    expect(remoteHost("https://evil.example/github.com/acme/crm.git")).toBe("evil.example");
+    expect(remoteHost("https://github.com.evil.example/acme/crm.git")).toBe("github.com.evil.example");
+    expect(remoteHost("/srv/git/crm.git")).toBeUndefined();
   });
 
   it("skips the workflow outside GitHub unless asked", () => {

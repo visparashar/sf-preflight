@@ -79,12 +79,35 @@ jobs:
 `;
 }
 
+/** The host of a git remote URL: `https://host/…`, `ssh://git@host/…` or scp-like `git@host:…`. */
+export function remoteHost(url: string): string | undefined {
+  const u = url.trim();
+  const scp = /^[\w.+-]+@([^:/\s]+):(?!\/\/)/.exec(u);
+  if (scp) return scp[1]!.toLowerCase();
+  try {
+    return new URL(u).hostname.toLowerCase() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isGitHub(root: string): boolean {
   if (existsSync(path.join(root, ".github"))) return true;
   try {
-    return /github\.com[:/]/i.test(git(root, ["remote", "get-url", "origin"]));
+    return remoteHost(git(root, ["remote", "get-url", "origin"])) === "github.com";
   } catch {
     return false;
+  }
+}
+
+/** Create `file` only if it doesn't exist (one exclusive open, no check-then-write race). */
+function createNew(file: string, content: string): boolean {
+  try {
+    writeFileSync(file, content, { flag: "wx" });
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw err;
   }
 }
 
@@ -100,19 +123,19 @@ export function initProject(opts: InitOptions): InitResult {
   const files: InitFile[] = [];
 
   const put = (abs: string, what: string, content: string) => {
-    const exists = existsSync(abs);
     const file = toPosix(path.relative(projectDir, abs));
-    if (exists && !opts.force) {
-      files.push({ file, what, status: "exists" });
-      return;
-    }
     if (opts.dryRun) {
-      files.push({ file, what, status: exists ? "would replace" : "would create" });
+      const exists = existsSync(abs);
+      files.push({ file, what, status: !exists ? "would create" : opts.force ? "would replace" : "exists" });
       return;
     }
     mkdirSync(path.dirname(abs), { recursive: true });
-    writeFileSync(abs, content);
-    files.push({ file, what, status: exists ? "replaced" : "created" });
+    if (createNew(abs, content)) files.push({ file, what, status: "created" });
+    else if (!opts.force) files.push({ file, what, status: "exists" });
+    else {
+      writeFileSync(abs, content);
+      files.push({ file, what, status: "replaced" });
+    }
   };
 
   put(path.join(projectDir, ".preflight.json"), "policy: gate on high findings the change introduces", starterPolicy());
