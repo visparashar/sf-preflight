@@ -59,17 +59,22 @@ idempotency, boundary and permission-negative tests for exactly what the change 
 
 ## Quick start
 
-Requires Node.js 22.13 or newer. Run it from the root of an SFDX project:
+Requires Node.js 22.13 or newer. Run it anywhere in an SFDX project's git checkout:
 
 ```bash
-npx sf-preflight analyze --base origin/main
+npx sf-preflight analyze
 ```
 
-or install the `preflight` command globally:
+It compares your branch, committed and uncommitted, with the default branch (`origin/HEAD`, else
+`origin/main`, `origin/master`, `main` or `master`), counting only what your branch changed since it
+left it. Pass `--base <branch>` to compare with another branch, or `--files <paths...>` to check
+specific files without git.
+
+Or install the `preflight` command globally:
 
 ```bash
 npm install -g sf-preflight
-preflight analyze --base origin/main
+preflight analyze
 ```
 
 To run from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md#development-setup).
@@ -77,8 +82,11 @@ To run from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md#development-se
 ### Usage
 
 ```bash
-# Everything changed since origin/main (committed and uncommitted)
-preflight analyze --project path/to/sfdx-project --base origin/main
+# Everything your branch changed (committed and uncommitted), compared with the default branch
+preflight analyze
+
+# Compare with another branch, or analyze a project in another folder
+preflight analyze --base origin/develop --project path/to/sfdx-project
 
 # Compare two refs
 preflight analyze --base origin/main --head HEAD
@@ -108,8 +116,8 @@ preflight rollback 9c607ea --component ValidationRule:Opportunity.Require_Close_
 
 | Option | Default | Description |
 |---|---|---|
-| `-p, --project <dir>` | `.` | SFDX project directory (reads `sfdx-project.json`) |
-| `-b, --base <ref>` | — | Git base ref |
+| `-p, --project <dir>` | the project the current folder is in | SFDX project directory (reads `sfdx-project.json`) |
+| `-b, --base <ref>` | the default branch | Git base ref; the comparison starts where your branch left it |
 | `--head <ref>` | working tree | Git head ref |
 | `-f, --files <paths...>` | — | Analyze these files instead of a git diff |
 | `--format <md\|json\|sarif\|junit>` | `md` | Output format |

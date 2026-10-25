@@ -1,9 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { analyze } from "./analyze.js";
 import { applyBaseline, findingsAtRef, readBaselineFile } from "./baseline.js";
-import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, gitStagedFiles, hasHead, toChanges } from "./changes.js";
+import {
+  comparisonBase,
+  defaultBaseRef,
+  filesFromArgs,
+  gitChangedFiles,
+  gitRoot,
+  gitShow,
+  gitStagedFiles,
+  hasHead,
+  notGitError,
+  toChanges,
+} from "./changes.js";
 import { applyConfig, loadPolicy, type PreflightConfig } from "./config.js";
 import { destructiveChanges } from "./destructive.js";
 import { enrichWithOrg } from "./org/enrich.js";
@@ -30,7 +42,15 @@ export {
   wholeProjectChanges,
   writeBaselineFile,
 } from "./baseline.js";
-export { assertSafeRef, filesFromArgs, gitChangedFiles, gitRoot, toChanges } from "./changes.js";
+export {
+  assertSafeRef,
+  comparisonBase,
+  defaultBaseRef,
+  filesFromArgs,
+  gitChangedFiles,
+  gitRoot,
+  toChanges,
+} from "./changes.js";
 export {
   applyConfig,
   CONFIG_FILE,
@@ -127,7 +147,7 @@ export {
   validateTests,
   validationToMarkdown,
 } from "./org/validate.js";
-export { classifyPath, loadProject, sourceRoots } from "./project.js";
+export { classifyPath, findProjectRoot, loadProject, projectsBelow, sourceRoots } from "./project.js";
 export { detectAiTools, gitProvenance } from "./provenance.js";
 export { toJunit } from "./report/junit.js";
 export { toMarkdown } from "./report/markdown.js";
@@ -147,7 +167,11 @@ export * from "./types.js";
 
 export interface RunOptions {
   projectDir: string;
-  /** Git base ref. Required unless `files` is given. */
+  /**
+   * Git base ref. When neither this, `files` nor `staged` is given, the default branch is used
+   * (`origin/HEAD`, else origin/main, origin/master, main or master). Against the working tree, the
+   * comparison starts where the current branch left this ref (its merge base).
+   */
   base?: string;
   /** Git head ref; defaults to the working tree. */
   head?: string;
@@ -194,6 +218,38 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
     const rel = toPosix(path.relative(projectDir, path.resolve(projectDir, file)));
     if (!rel.startsWith("..") && !path.isAbsolute(rel)) overlay.set(rel, text);
   }
+  const notes: string[] = [];
+  if (!existsSync(path.join(projectDir, "sfdx-project.json"))) {
+    notes.push(
+      `No sfdx-project.json in ${projectDir}: analyzed it as plain source. If this isn't your Salesforce project's root folder, results may be incomplete; run preflight from that folder or pass --project.`,
+    );
+  }
+  // Explicit files that don't exist are almost always a typo; analyzing nothing would read as "no risk".
+  let missingFiles: string[] = [];
+  if (opts.files?.length) {
+    missingFiles = opts.files.filter(
+      (f) =>
+        !existsSync(path.resolve(f)) &&
+        !existsSync(path.resolve(projectDir, f)) &&
+        !overlay.has(toPosix(path.relative(projectDir, path.resolve(projectDir, f)))),
+    );
+    if (missingFiles.length === opts.files.length) {
+      throw new Error(
+        `${missingFiles.length === 1 ? "File not found" : "Files not found"}: ${missingFiles.join(", ")}\nPaths are relative to the current folder (${process.cwd()}).`,
+      );
+    }
+    if (missingFiles.length) notes.push(`Skipped files that don't exist: ${missingFiles.join(", ")}`);
+  }
+  if (!opts.staged && !opts.files?.length && !opts.base) {
+    if (!gitRoot(projectDir)) throw notGitError(projectDir);
+    const detected = defaultBaseRef(projectDir);
+    if (!detected) {
+      throw new Error(
+        "Couldn't find a branch to compare with (looked for origin/HEAD, origin/main, origin/master, main and master).\nPass one with --base <branch>, or --base HEAD to check only uncommitted changes.",
+      );
+    }
+    opts = { ...opts, base: detected };
+  }
   const model = loadProject(projectDir, { overlay });
   let changedFiles: { file: string; changeType: ChangeType; previousFile?: string }[];
   let partlyStaged: string[] = [];
@@ -203,12 +259,17 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
     partlyStaged = staged.partlyStaged;
     if (hasHead(projectDir)) opts = { ...opts, base: "HEAD" };
   } else if (opts.files?.length) {
-    changedFiles = filesFromArgs(projectDir, opts.files);
-  } else if (opts.base) {
-    changedFiles = gitChangedFiles({ projectDir, base: opts.base, head: opts.head });
+    const missing = new Set(missingFiles);
+    changedFiles = filesFromArgs(
+      projectDir,
+      opts.files.filter((f) => !missing.has(f)),
+    );
   } else {
-    throw new Error("Provide either --base <git ref> or --files <paths...>");
+    changedFiles = gitChangedFiles({ projectDir, base: opts.base!, head: opts.head });
   }
+  // Base versions of files (permission diffs, the "base" baseline) come from the same commit the
+  // diff starts from: the merge base, not the tip of the base branch.
+  const fromRef = opts.base && !opts.staged ? comparisonBase(projectDir, opts.base, opts.head) : opts.base;
   // Only package directories are Salesforce source: changes elsewhere in the project (generated
   // tests in preflight-tests/, scripts, docs) aren't deployed, so a git diff leaves them out.
   const outside: string[] = [];
@@ -247,7 +308,7 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
     base: opts.base,
     head: opts.head,
     maxDepth: opts.maxDepth,
-    readBase: opts.base ? (file) => gitShow(projectDir, opts.base!, file) : undefined,
+    readBase: fromRef ? (file) => gitShow(projectDir, fromRef, file) : undefined,
     provenance:
       opts.base && !opts.files?.length && !opts.staged ? gitProvenance(projectDir, opts.base, opts.head) : undefined,
   });
@@ -258,6 +319,7 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
     for (const c of result.changes) c.component = { ...c.component, file: real(c.component.file) };
   }
   if (destructive.warnings.length) result.warnings = [...result.warnings, ...destructive.warnings];
+  if (notes.length) result.warnings = [...notes, ...result.warnings];
   if (partlyStaged.length)
     result.warnings = [
       ...result.warnings,
@@ -290,7 +352,7 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
     if (opts.base) {
       final = applyBaseline(
         final,
-        findingsAtRef(projectDir, opts.base, changes, policyConfig, opts.maxDepth),
+        findingsAtRef(projectDir, fromRef ?? opts.base, changes, policyConfig, opts.maxDepth),
         `base ref ${opts.base}`,
       );
     } else if (!opts.staged) {

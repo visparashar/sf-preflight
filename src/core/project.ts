@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { parseApexUnit } from "./apexUnit.js";
 import { applyCallGraph } from "./callGraph.js";
@@ -120,6 +120,44 @@ function classifyOther(parts: string[], file: string): ComponentRef {
     }
   }
   return { type: "Other", name: base, file };
+}
+
+/**
+ * The SFDX project a folder belongs to: the nearest folder at or above `start` that holds
+ * `sfdx-project.json`, searching no higher than the git work tree's root (when there is one).
+ */
+export function findProjectRoot(start: string, stopAt?: string): string | undefined {
+  let dir = path.resolve(start);
+  const stop = stopAt ? path.resolve(stopAt) : undefined;
+  for (;;) {
+    if (existsSync(path.join(dir, "sfdx-project.json"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir || (stop && dir === stop)) return undefined;
+    dir = parent;
+  }
+}
+
+/** Folders one or two levels below `dir` that hold `sfdx-project.json` (a monorepo's projects). */
+export function projectsBelow(dir: string, max = 5): string[] {
+  const found: string[] = [];
+  const visit = (d: string, depth: number) => {
+    if (found.length >= max) return;
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
+      const sub = path.join(d, e.name);
+      if (existsSync(path.join(sub, "sfdx-project.json"))) found.push(sub);
+      else if (depth < 2) visit(sub, depth + 1);
+      if (found.length >= max) return;
+    }
+  };
+  visit(path.resolve(dir), 1);
+  return found;
 }
 
 /** Read `sfdx-project.json` package directories; fall back to `force-app` or the project root. */

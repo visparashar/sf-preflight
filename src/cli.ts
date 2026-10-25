@@ -32,10 +32,12 @@ import {
   explainAgent,
   type Fix,
   findFixes,
+  findProjectRoot,
   fixesToMarkdown,
   GENERIC_ORG_LABEL,
   gateToMarkdown,
   generateTests,
+  gitRoot,
   incidentsToMarkdown,
   investigateIncidents,
   loadPolicy,
@@ -50,6 +52,7 @@ import {
   parseSince,
   payloadFor,
   planRollback,
+  projectsBelow,
   type RunOptions,
   readResult,
   rollbackToMarkdown,
@@ -198,7 +201,7 @@ program
 const policyOptions = (cmd: Command) =>
   cmd
     .option("-p, --project <dir>", "SFDX project directory", ".")
-    .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
+    .option("-b, --base <ref>", "git base ref (default: origin/HEAD, origin/main, origin/master, main or master)")
     .option("--head <ref>", "git head ref (default: working tree)")
     .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
     .option("--staged", "the files staged for the next commit, compared with HEAD")
@@ -281,7 +284,7 @@ program
   .command("fix")
   .description("Propose checked fixes for a change's findings; --apply writes them")
   .option("-p, --project <dir>", "SFDX project directory", ".")
-  .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
+  .option("-b, --base <ref>", "git base ref (default: the default branch, as for analyze)")
   .option("--head <ref>", "git head ref (default: working tree)")
   .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
   .option("--staged", "the files staged for the next commit, compared with HEAD")
@@ -414,7 +417,7 @@ program
   .command("tests")
   .description("Generate Apex tests for what a change touches (bulk, recursion, idempotency, swallowed errors)")
   .option("-p, --project <dir>", "SFDX project directory", ".")
-  .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
+  .option("-b, --base <ref>", "git base ref (default: the default branch, as for analyze)")
   .option("--head <ref>", "git head ref (default: working tree)")
   .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
   .option("-o, --out <dir>", "directory to write the classes to (default: <project>/preflight-tests)")
@@ -570,7 +573,7 @@ program
     "Run the Testing Center tests that cover the agent actions a change affects (in an org the change is deployed to)",
   )
   .option("-p, --project <dir>", "SFDX project directory", ".")
-  .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
+  .option("-b, --base <ref>", "git base ref (default: the default branch, as for analyze)")
   .option("--head <ref>", "git head ref (default: working tree)")
   .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
   .option("--org <alias>", "sandbox, scratch org or Developer Edition org with the change deployed")
@@ -598,9 +601,9 @@ program
     }) => {
       if (!opts.org && !opts.dryRun) throw new Error("agent-tests needs --org <alias> (or --dry-run).");
       if (opts.all && opts.test?.length) throw new Error("Use either --all or --test, not both.");
-      const changed = !!(opts.base || opts.files?.length);
-      if (!changed && !opts.test?.length)
-        throw new Error("Provide --base or --files to pick tests from a change, or --test <names...>.");
+      // Tests come from the change (vs the default branch unless --base/--files say otherwise),
+      // or from --test alone.
+      const changed = !!(opts.base || opts.files?.length) || !opts.test?.length;
       const { model, result } = changed
         ? analyzeChange({ projectDir: opts.project, base: opts.base, head: opts.head, files: opts.files })
         : { model: loadProject(opts.project), result: undefined };
@@ -1091,12 +1094,78 @@ program
     await startMcpServer({ root: opts.root, version });
   });
 
-// "A newer version is available", for a person at a terminal (see updateNotice.ts).
+/** Commands whose --project is the SFDX project to read (not a folder to install into). */
+const READS_PROJECT = new Set([
+  "analyze",
+  "fix",
+  "evidence",
+  "tests",
+  "agents",
+  "agent-tests",
+  "incidents",
+  "rollback",
+  "explain",
+  "baseline",
+  "hook",
+]);
+
+/**
+ * Without --project, use the SFDX project the current folder belongs to (like git finds its
+ * repository), or the single project in a folder below it. Says so on a terminal.
+ */
+function resolveProjectOption(action: Command): void {
+  if (!READS_PROJECT.has(action.name()) || action.getOptionValueSource("project") !== "default") return;
+  const cwd = process.cwd();
+  const note = (msg: string) => {
+    if (process.stderr.isTTY) process.stderr.write(`preflight: ${msg}\n`);
+  };
+  const found = findProjectRoot(cwd, gitRoot(cwd));
+  if (found) {
+    if (found !== cwd) {
+      action.setOptionValueWithSource("project", found, "default");
+      note(`using the SFDX project in ${path.relative(cwd, found) || "."}`);
+    }
+    return;
+  }
+  const below = projectsBelow(cwd);
+  if (below.length === 1) {
+    action.setOptionValueWithSource("project", below[0], "default");
+    note(`using the SFDX project in ${path.relative(cwd, below[0]!)}`);
+  } else if (below.length > 1) {
+    process.stderr.write(
+      `preflight: no sfdx-project.json here, but there are several projects below: ${below.map((d) => path.relative(cwd, d)).join(", ")}\nChoose one with --project <dir>.\n`,
+    );
+  }
+}
+
 program.hook("preAction", (_root, action) => {
+  resolveProjectOption(action);
+  // "A newer version is available", for a person at a terminal (see updateNotice.ts).
   let top: Command = action;
   while (top.parent && top.parent !== program) top = top.parent;
   startUpdateCheck({ command: top.name(), version, scriptPath: process.argv[1] ?? "" });
 });
+
+// Group the commands by what they're for, and show where to start.
+const GROUPS: [string, string[]][] = [
+  ["Check a change:", ["analyze", "fix", "tests", "explain", "evidence", "baseline"]],
+  ["Agentforce:", ["agents", "agent-tests"]],
+  ["After release:", ["incidents", "rollback", "monitor", "notify"]],
+  ["Set up:", ["hook", "agent-hook", "skill", "mcp"]],
+];
+for (const [heading, names] of GROUPS)
+  for (const name of names) program.commands.find((c) => c.name() === name)?.helpGroup(heading);
+program.addHelpText(
+  "after",
+  `
+Get started (from your SFDX project's folder):
+  preflight analyze                 what your branch's changes set off, compared with the default branch
+  preflight analyze --base develop  compare with another branch
+  preflight analyze --files <path>  check specific files, no git needed
+  preflight tests                   generate Apex tests for what the change touches
+
+Docs: https://visparashar.github.io/sf-preflight/`,
+);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(`preflight: ${(err as Error).message}`);
