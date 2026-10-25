@@ -35,6 +35,106 @@ export function gitRoot(dir: string): string | undefined {
   }
 }
 
+/** Whether `ref` names a commit in the repository. */
+export function refExists(repoRoot: string, ref: string): boolean {
+  try {
+    git(repoRoot, ["rev-parse", "--verify", "--quiet", `${assertSafeRef(ref)}^{commit}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The branches a change is usually compared with, in the order they are tried. */
+const DEFAULT_BASES = ["origin/main", "origin/master", "main", "master"];
+
+/**
+ * The branch to compare with when none is given: the remote's default branch (`origin/HEAD`), else
+ * the first of origin/main, origin/master, main and master that exists. The VS Code extension picks
+ * its base the same way. Undefined outside a git repository or when none of them exists.
+ */
+export function defaultBaseRef(dir: string): string | undefined {
+  const root = gitRoot(dir);
+  if (!root) return undefined;
+  let remoteHead = "";
+  try {
+    remoteHead = git(root, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).trim();
+  } catch {
+    // no origin, or origin/HEAD isn't set (common after `git remote add`)
+  }
+  for (const ref of [remoteHead, ...DEFAULT_BASES]) if (ref && refExists(root, ref)) return ref;
+  return undefined;
+}
+
+/**
+ * The commit a comparison starts from: where `head` (by default the current branch) left `base`
+ * (`git merge-base`). Commits added to the base branch since then belong to other people's work,
+ * not to this change, so they are left out. Falls back to `base` itself when there is no common
+ * commit (a shallow clone or unrelated histories).
+ */
+export function comparisonBase(dir: string, base: string, head = "HEAD"): string {
+  assertSafeRef(base, "base ref");
+  assertSafeRef(head, "head ref");
+  const root = gitRoot(dir);
+  if (!root) return base;
+  try {
+    return git(root, ["merge-base", base, head]).trim() || base;
+  } catch {
+    return base;
+  }
+}
+
+/** Branches to suggest when a ref can't be found: likely bases first, then the rest. */
+function branchSuggestions(repoRoot: string, max = 6): string[] {
+  let names: string[] = [];
+  try {
+    names = git(repoRoot, ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"])
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s && !s.endsWith("/HEAD") && s !== "origin");
+  } catch {
+    return [];
+  }
+  const rank = (n: string) => {
+    const i = DEFAULT_BASES.indexOf(n);
+    if (i >= 0) return i;
+    return /(^|\/)(develop|dev|release|staging|uat)\b/.test(n) ? 10 : 20;
+  };
+  return [...new Set(names)].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b)).slice(0, max);
+}
+
+function hasRemote(repoRoot: string, name: string): boolean {
+  try {
+    return git(repoRoot, ["remote"]).split("\n").includes(name);
+  } catch {
+    return false;
+  }
+}
+
+/** An error that says which ref is missing and what to try instead. */
+export function missingRefError(repoRoot: string, ref: string, label = "base ref"): Error {
+  const lines = [`Can't find the git ${label} "${ref}" in this repository.`];
+  const suggestions = branchSuggestions(repoRoot);
+  if (suggestions.length) lines.push(`Branches you could compare with: ${suggestions.join(", ")}`);
+  else lines.push("This repository has no other branches yet; commit your work on a branch first.");
+  if (isShallow(repoRoot)) {
+    const branch = ref.replace(/^origin\//, "");
+    lines.push(
+      `This is a shallow clone, so other branches may be missing: run \`git fetch origin ${branch}\` (in GitHub Actions, use actions/checkout with fetch-depth: 0).`,
+    );
+  } else if (ref.startsWith("origin/") && hasRemote(repoRoot, "origin")) {
+    lines.push(`If the branch exists on the remote, fetch it first: git fetch origin ${ref.slice("origin/".length)}`);
+  }
+  return new Error(lines.join("\n"));
+}
+
+/** The error for a folder outside git, with the way to analyze without git. */
+export function notGitError(dir: string): Error {
+  return new Error(
+    `${dir} is not inside a git repository, so there is no change to compare.\nAnalyze specific files instead with --files <paths...>, or run preflight from your project's git checkout.`,
+  );
+}
+
 export interface GitDiffOptions {
   projectDir: string;
   base: string;
@@ -59,8 +159,12 @@ export function gitChangedFiles(
   assertSafeRef(opts.base, "base ref");
   if (opts.head) assertSafeRef(opts.head, "head ref");
   const repoRoot = gitRoot(projectDir);
-  if (!repoRoot) throw new Error(`Not a git repository: ${projectDir}`);
-  const range = opts.head ? [`${opts.base}...${opts.head}`] : [opts.base];
+  if (!repoRoot) throw notGitError(projectDir);
+  if (!refExists(repoRoot, opts.base)) throw missingRefError(repoRoot, opts.base);
+  if (opts.head && !refExists(repoRoot, opts.head)) throw missingRefError(repoRoot, opts.head, "head ref");
+  // Against the working tree, start where this branch left the base (as `base...head` does), so
+  // commits merged into the base since then aren't reported as part of this change.
+  const range = opts.head ? [`${opts.base}...${opts.head}`] : [comparisonBase(repoRoot, opts.base)];
   const out = git(repoRoot, ["diff", "--name-status", "-M", ...range, "--", projectDir]);
 
   const toProjectRel = (repoRel: string) => toPosix(path.relative(projectDir, path.join(repoRoot, repoRel)));
@@ -95,7 +199,7 @@ export function gitStagedFiles(projectDir: string): {
 } {
   const dir = path.resolve(projectDir);
   const repoRoot = gitRoot(dir);
-  if (!repoRoot) throw new Error(`Not a git repository: ${dir}`);
+  if (!repoRoot) throw notGitError(dir);
   const toProjectRel = (repoRel: string) => toPosix(path.relative(dir, path.join(repoRoot, repoRel)));
   const files: { file: string; changeType: ChangeType; previousFile?: string }[] = [];
   for (const line of git(repoRoot, ["diff", "--cached", "--name-status", "-M", "--", dir]).split("\n")) {

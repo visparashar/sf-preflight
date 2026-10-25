@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { closeSync, fstatSync, ftruncateSync, openSync, readFileSync, readSync, writeSync } from "node:fs";
 import path from "node:path";
 import { fingerprint } from "./baseline.js";
-import { gitShow } from "./changes.js";
+import { comparisonBase, gitShow } from "./changes.js";
 import { FIXABLE_RULES, type FixKind, type ProposedFix, proposeFix } from "./fixers.js";
 import { analyzeChange, type RunOptions } from "./index.js";
 import { unifiedDiff } from "./textDiff.js";
@@ -59,7 +59,8 @@ export function findFixes(opts: RunOptions, fixOpts: FixOptions = {}): FixReport
   for (const [f, t] of Object.entries(opts.overlay ?? {}))
     overlay[toPosix(path.relative(projectDir, path.resolve(projectDir, f)))] = t;
   const { result } = analyzeChange(opts);
-  const baseRef = opts.staged ? "HEAD" : opts.base;
+  // The same commit the analysis compared with: HEAD for staged files, else the merge base.
+  const baseRef = opts.staged ? "HEAD" : result.base ? comparisonBase(projectDir, result.base, opts.head) : undefined;
   const read = (file: string) => {
     if (file in overlay) return overlay[file];
     try {

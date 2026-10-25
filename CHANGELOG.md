@@ -7,6 +7,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Works with no options**: `preflight analyze` (and `fix`, `tests`, `evidence`, `agent-tests`) compares with the
+  default branch when `--base` isn't given: `origin/HEAD`, else `origin/main`, `origin/master`, `main` or `master`,
+  as the VS Code extension already did.
+- **Project folder found for you**: without `--project`, commands use the SFDX project the current folder is in
+  (searching up to the git root, like git finds its repository), or the only project in a folder below it.
+- **Grouped `--help`** with a "Get started" section.
+
+### Fixed
+
+- **Changes merged into the base branch no longer count as yours**: comparing the working tree with `--base` now
+  starts where the current branch left the base (its merge base), as `--base … --head …` already did. Before, on a
+  branch behind `main`, other people's changes on `main` were reported as part of the change. Base versions used
+  for permission diffs, the `"base"` baseline and fixes come from the same commit.
+- **No more silent all-clear**: `--files` with paths that don't exist fails ("File not found") instead of reporting
+  LOW risk, or warns when only some are missing; analyzing a folder without `sfdx-project.json` adds a warning.
+- **Clearer errors**: a base ref that doesn't exist names the branches you could use (and how to fetch in a
+  shallow clone) instead of git's `bad revision`; outside a git repository, the error points to `--files`.
+
 ## [0.14.0] - 2026-10-16
 
 ### Added
